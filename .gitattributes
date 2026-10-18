@@ -1,0 +1,7 @@
+*.ps1 text eol=crlf
+*.vbs text eol=crlf
+*.cmd text eol=crlf
+*.nss text eol=crlf
+*.md text eol=lf
+*.xml text eol=crlf
+*.ico binary

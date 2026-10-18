@@ -1,0 +1,5 @@
+MenuLabel.txt
+MenuLabel.*.tmp*
+package.commit
+backups/
+*.log
