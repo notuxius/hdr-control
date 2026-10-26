@@ -176,15 +176,8 @@ namespace LocalHdrMenu {
             try { $ownsMutex = $watchMutex.WaitOne(0) }
             catch [Threading.AbandonedMutexException] { $ownsMutex = $true }
             if (-not $ownsMutex) { return }
-            while (Test-Path -LiteralPath $installedScript) {
-                try {
-                    Sync-HdrMenu @([LocalHdrMenu.DisplayApi]::Read())
-                } catch {
-                    # Display changes and sleep can temporarily make the API
-                    # unavailable. Retry without opening a dialog.
-                }
-                Start-Sleep -Seconds 2
-            }
+            . (Join-Path $installDir 'HdrTray.ps1')
+            Start-HdrTray
         } finally {
             if ($ownsMutex) { $watchMutex.ReleaseMutex() }
             $watchMutex.Dispose()

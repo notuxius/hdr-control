@@ -11,7 +11,7 @@ Select Case action
     Case "Toggle", "On", "Off", "Watch", "Sync"
     Case Else: WScript.Quit 2
 End Select
-command = Chr(34) & powershell & Chr(34) & " -NoLogo -NoProfile -NonInteractive -WindowStyle Hidden -ExecutionPolicy Bypass -File " & Chr(34) & script & Chr(34) & " -Action " & action
+command = Chr(34) & powershell & Chr(34) & " -NoLogo -NoProfile -NonInteractive -STA -WindowStyle Hidden -ExecutionPolicy Bypass -File " & Chr(34) & script & Chr(34) & " -Action " & action
 If action <> "Watch" Then command = command & " -ShowError"
 result = shell.Run(command, 0, True)
 WScript.Quit result

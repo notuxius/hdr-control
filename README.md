@@ -2,7 +2,18 @@
 
 One desktop right-click action: **Enable HDR** when HDR is off and **Disable HDR** when it is on. With Nilesoft Shell, the action appears directly above **Display settings**.
 
-The label follows changes made through Windows Settings, Win+Alt+B, or other apps. A hidden helper checks Windows display state every two seconds and starts when you sign in. Clicking the menu sets the requested state explicitly and checks that Windows applied it.
+The label follows changes made through Windows Settings, Win+Alt+B, or other apps. A background helper checks Windows display state every two seconds and starts when you sign in. Clicking the menu sets the requested state explicitly and checks that Windows applied it.
+
+## Tray icon
+
+The same helper also shows an HDR icon in the notification area (it may initially appear inside the hidden-icons arrow). Hover over it for current status, or right-click it for:
+
+- **HDR: On / Off / Mixed**, plus a **Displays** submenu with each display's status.
+- **Enable HDR / Disable HDR**, matching the current state. The action affects all HDR-capable displays and is disabled when none are available.
+- **HDR settings** and **Display settings** shortcuts. Double-clicking the icon opens HDR settings too.
+- **Exit**, which closes the helper until the next sign-in. Automatic desktop label refresh also stops until the helper is restarted.
+
+Run **Start-Tray.vbs** to restart it without signing out. Only one helper runs per session. Transient display disconnects show an unavailable status and recover automatically. Status updates every two seconds and whenever the tray menu opens. The HDR shortcut uses `ms-settings:display-advancedcolor`; Display settings is also available for Windows versions that do not expose the dedicated HDR page.
 
 ## Install
 
@@ -24,6 +35,8 @@ Run **Uninstall.cmd**, or run the installed `Setup.ps1 -Action Uninstall`. This 
 ## How it works
 
 `HdrSdrMenu.ps1` calls the Windows DisplayConfig APIs directly. Newer Windows versions use the HDR-specific API; older versions fall back to advanced-color support. `Toggle-HdrSdr.vbs` launches the helper without a console window. No third-party executable or network connection is needed to operate HDR.
+
+`HdrTray.ps1` provides the Windows Forms tray menu inside the existing helper. The HDR command runs in a hidden child process so the menu remains responsive while Windows changes display mode. Run `powershell.exe -NoProfile -STA -File tests\Tray.Tests.ps1` for tray behavior tests using simulated displays; these tests do not change HDR.
 
 To inspect state without changing it:
 
