@@ -115,9 +115,9 @@ function Initialize-HdrTray {
     [void]$script:hdrTray.Menu.Items.Add((New-Object Windows.Forms.ToolStripSeparator))
     [void]$script:hdrTray.Menu.Items.Add($script:hdrTray.Exit)
     $script:hdrTray.Command.add_Click({ Start-HdrChange ([string]$script:hdrTray.Command.Tag) })
-    $script:hdrTray.HdrSettings.add_Click({ Open-HdrSettings 'ms-settings:display-advancedcolor' })
+    $script:hdrTray.HdrSettings.add_Click({ Open-HdrSettings 'ms-settings:display-hdr' })
     $script:hdrTray.DisplaySettings.add_Click({ Open-HdrSettings 'ms-settings:display' })
-    $script:hdrTray.Icon.add_DoubleClick({ Open-HdrSettings 'ms-settings:display-advancedcolor' })
+    $script:hdrTray.Icon.add_DoubleClick({ Open-HdrSettings 'ms-settings:display-hdr' })
     $script:hdrTray.Menu.add_Opening({ Update-HdrTray })
     $script:hdrTray.Exit.add_Click({ [Windows.Forms.Application]::ExitThread() })
     $script:hdrTray.Timer.Interval = 2000

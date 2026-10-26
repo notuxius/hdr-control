@@ -59,7 +59,7 @@ try {
     Update-HdrTray
     Assert ($script:hdrTray.Command.Enabled) 'Tray failed to recover after display read failure'
     $script:hdrTray.HdrSettings.PerformClick()
-    Assert ($script:requestedUri -eq 'ms-settings:display-advancedcolor') 'HDR settings link incorrect'
+    Assert ($script:requestedUri -eq 'ms-settings:display-hdr') 'HDR settings link incorrect'
     $script:hdrTray.DisplaySettings.PerformClick()
     Assert ($script:requestedUri -eq 'ms-settings:display') 'Display settings link incorrect'
     Assert ($script:syncCount -eq 6) 'Desktop label synchronization stopped'

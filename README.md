@@ -13,7 +13,7 @@ The same helper also shows an HDR icon in the notification area (it may initiall
 - **HDR settings** and **Display settings** shortcuts. Double-clicking the icon opens HDR settings too.
 - **Exit**, which closes the helper until the next sign-in. Automatic desktop label refresh also stops until the helper is restarted.
 
-Run **Start-Tray.vbs** to restart it without signing out. Only one helper runs per session. Transient display disconnects show an unavailable status and recover automatically. Status updates every two seconds and whenever the tray menu opens. The HDR shortcut uses `ms-settings:display-advancedcolor`; Display settings is also available for Windows versions that do not expose the dedicated HDR page.
+Run **Start-Tray.vbs** to restart it without signing out. Only one helper runs per session. Transient display disconnects show an unavailable status and recover automatically. Status updates every two seconds and whenever the tray menu opens. The HDR shortcut uses `ms-settings:display-hdr`; Display settings is also available for Windows versions that do not expose the dedicated HDR page.
 
 ## Install
 
