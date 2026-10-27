@@ -32,7 +32,7 @@ try {
     Assert ($null -ne $script:hdrTray.ShowMenuMethod) 'Native tray popup method unavailable'
     Assert ($script:hdrTray.Icon.ContextMenuStrip -eq $script:hdrTray.Menu) 'Right click not bound to settings menu'
     Assert (($script:hdrTray.Menu.Items | Where-Object {$_ -is [Windows.Forms.ToolStripMenuItem] -and $_ -isnot [LocalHdrMenu.TrayStatusItem]} | ForEach-Object Text) -join '|' -eq 'HDR settings|Display settings|Exit') 'Right-click menu contains wrong items'
-    Assert (-not $script:hdrTray.RightStatus.CanSelect) 'Right-click status must not highlight or select'
+    Assert ($script:hdrTray.Menu.Items.Count -eq 4 -and $script:hdrTray.Menu.Items[2] -is [Windows.Forms.ToolStripSeparator]) 'Right-click menu should contain only two settings shortcuts, a separator, and Exit'
     Assert ($script:hdrTray.Menu.ShowActionIcons) 'Right-click menu icons are missing'
     Assert ($script:hdrTray.ControlsMenu.Items.Contains($script:hdrTray.Displays)) 'Displays missing from left-click menu'
     Assert ($script:hdrTray.ControlsMenu.Items.Contains($script:hdrTray.Command)) 'HDR action missing from left-click menu'
@@ -51,7 +51,7 @@ try {
     [LocalHdrMenu.DisplayApi]::Displays = @((Display 'Primary' $true $false))
     Update-HdrTray
     Assert ($script:hdrTray.Status.Text -eq 'HDR: Off') 'SDR status incorrect'
-    Assert ($script:hdrTray.RightStatus.Text -eq 'HDR: Off' -and $script:hdrTray.Displays.DropDownItems[0].Text -eq 'Primary - HDR: Off') 'Off labels should be consistent across menus'
+    Assert ($script:hdrTray.Displays.DropDownItems[0].Text -eq 'Primary - HDR: Off') 'Off labels should be consistent across menus'
     Assert ($script:hdrTray.Icon.Icon.Handle -eq $script:hdrTray.DisabledIcon.Handle) 'SDR should use the yellow monitor icon'
     Assert ($script:hdrTray.Command.Text -eq 'Enable HDR') 'SDR command incorrect'
     $script:hdrTray.Command.PerformClick()
@@ -59,7 +59,7 @@ try {
     [LocalHdrMenu.DisplayApi]::Displays = @((Display 'Primary' $true $true))
     Update-HdrTray
     Assert ($script:hdrTray.Status.Text -eq 'HDR: On') 'HDR status incorrect'
-    Assert ($script:hdrTray.RightStatus.Text -eq 'HDR: On' -and $script:hdrTray.Displays.DropDownItems[0].Text -eq 'Primary - HDR: On') 'On labels should be consistent across menus'
+    Assert ($script:hdrTray.Displays.DropDownItems[0].Text -eq 'Primary - HDR: On') 'On labels should be consistent across menus'
     Assert ($script:hdrTray.Icon.Icon.Handle -eq $script:hdrTray.EnabledIcon.Handle) 'HDR should use the green monitor icon'
     Assert ($script:hdrTray.Icon.Text.EndsWith('HDR: On')) 'Tooltip did not update'
     $script:hdrTray.Command.PerformClick()
@@ -67,7 +67,6 @@ try {
     [LocalHdrMenu.DisplayApi]::Displays = @((Display 'Primary' $true $true),(Display 'Secondary' $true $false))
     Update-HdrTray
     Assert ($script:hdrTray.Status.Text -eq 'HDR: Mixed') 'Mixed status incorrect'
-    Assert ($script:hdrTray.RightStatus.Text -eq 'HDR: Mixed') 'Right-click mixed status incorrect'
     Assert ($script:hdrTray.Icon.Icon.Handle -eq $script:hdrTray.EnabledIcon.Handle) 'Mixed state should show HDR is enabled on a display'
     Assert ($script:hdrTray.Command.Tag -eq 'On') 'Mixed state should enable all'
     Assert ($script:hdrTray.Displays.DropDownItems.Count -eq 2) 'Per-display status missing'
@@ -75,7 +74,7 @@ try {
     Update-HdrTray
     Assert (-not $script:hdrTray.Command.Enabled) 'Unsupported display has an enabled command'
     Assert ($script:hdrTray.Status.Text -eq 'HDR: Unavailable') 'Unavailable caption is incorrect'
-    Assert ($script:hdrTray.RightStatus.Text -eq 'HDR: Unavailable' -and $script:hdrTray.Displays.DropDownItems[0].Text -eq 'SDR only - HDR: Unavailable') 'Unavailable labels should be consistent across menus'
+    Assert ($script:hdrTray.Displays.DropDownItems[0].Text -eq 'SDR only - HDR: Unavailable') 'Unavailable labels should be consistent across menus'
     Assert (-not $script:hdrTray.Command.Available) 'Unsupported display should hide the HDR action'
     Assert (-not $script:hdrTray.CommandSeparator.Available) 'Hidden action should not leave a separator'
     Assert ($script:hdrTray.Icon.Icon.Handle -eq $script:hdrTray.UnavailableIcon.Handle) 'Unsupported display should use the red X icon'

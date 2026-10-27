@@ -28,7 +28,6 @@ function Get-HdrTrayState($Displays) {
 
 function Set-HdrTrayState($State) {
     $script:hdrTray.Status.Text = $State.Status
-    $script:hdrTray.RightStatus.Text = $State.Status
     $script:hdrTray.Icon.Text = 'HDR Context Menu - ' + $State.Status
     if ($script:hdrTray.CurrentIconState -ne $State.IconState) {
         $script:hdrTray.Icon.Icon = switch ($State.IconState) {
@@ -125,7 +124,6 @@ function Initialize-HdrTray {
         ControlsMenu = New-Object LocalHdrMenu.TrayPopupMenu
         ShowMenuMethod = [Windows.Forms.NotifyIcon].GetMethod('ShowContextMenu', [Reflection.BindingFlags]'Instance,NonPublic')
         Status = New-Object LocalHdrMenu.TrayStatusItem
-        RightStatus = New-Object LocalHdrMenu.TrayStatusItem
         Command = New-Object Windows.Forms.ToolStripMenuItem
         CommandSeparator = New-Object Windows.Forms.ToolStripSeparator
         Displays = New-Object Windows.Forms.ToolStripMenuItem('Displays')
@@ -143,7 +141,6 @@ function Initialize-HdrTray {
         DetailsText = $null
     }
     $script:hdrTray.Status.Enabled = $false
-    $script:hdrTray.RightStatus.Enabled = $false
     $script:hdrTray.Icon.Icon = $script:hdrTray.UnavailableIcon
     $script:hdrTray.Icon.ContextMenuStrip = $script:hdrTray.Menu
     $script:hdrTray.Icon.Text = 'HDR Context Menu'
@@ -157,8 +154,6 @@ function Initialize-HdrTray {
     [void]$script:hdrTray.ControlsMenu.Items.Add($script:hdrTray.Displays)
     [void]$script:hdrTray.ControlsMenu.Items.Add($script:hdrTray.CommandSeparator)
     [void]$script:hdrTray.ControlsMenu.Items.Add($script:hdrTray.Command)
-    [void]$script:hdrTray.Menu.Items.Add($script:hdrTray.RightStatus)
-    [void]$script:hdrTray.Menu.Items.Add((New-Object Windows.Forms.ToolStripSeparator))
     [void]$script:hdrTray.Menu.Items.Add($script:hdrTray.HdrSettings)
     [void]$script:hdrTray.Menu.Items.Add($script:hdrTray.DisplaySettings)
     [void]$script:hdrTray.Menu.Items.Add((New-Object Windows.Forms.ToolStripSeparator))
@@ -166,7 +161,6 @@ function Initialize-HdrTray {
     $script:hdrTray.Command.Name = 'HdrAction'
     $script:hdrTray.Status.Name = 'HdrStatus'
     $script:hdrTray.Displays.Name = 'Displays'
-    $script:hdrTray.RightStatus.Name = 'HdrStatus'
     $script:hdrTray.HdrSettings.Name = 'HdrSettings'
     $script:hdrTray.DisplaySettings.Name = 'DisplaySettings'
     $script:hdrTray.Exit.Name = 'ExitAction'

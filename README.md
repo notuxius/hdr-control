@@ -21,7 +21,7 @@ Both menus open centered above the tray icon, shifting inward near screen edges 
 
 **Right-click** the icon for:
 
-- The same read-only HDR status, followed by **HDR settings** and **Display settings** shortcuts. Status, HDR settings, display settings, and exit use matching line icons.
+- **HDR settings** and **Display settings** shortcuts with solid gear icons.
 - **Exit**, which closes the helper until the next sign-in. Automatic desktop label refresh also stops until the helper is restarted.
 
 **Middle-click** (press the mouse wheel) to toggle HDR directly, using the current Windows display state. Further clicks are ignored while a change is in progress. As with the menu command, this affects all active HDR-capable displays.
