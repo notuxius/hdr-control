@@ -128,9 +128,10 @@ namespace LocalHdrMenu {
         }
         static void DrawGlyph(Graphics g, ToolStripItem item, int left, Color color) {
             string status = item.Tag as string ?? item.Text;
+            if (item.Name == "HdrAction") status = status == "On" ? "HDR: On" : "HDR: Off";
             bool highlighted = item.Enabled && item.Selected;
             Color background = Contrast ? (highlighted ? SystemColors.Highlight : SystemColors.Menu) : (highlighted ? Hover : Surface);
-            if (!Contrast && item.Name == "HdrStatus") {
+            if (!Contrast && (item.Name == "HdrStatus" || (item.Name == "HdrAction" && item.Enabled))) {
                 if (status == "HDR: Off") color = Color.FromArgb(227, 190, 44);
                 else if (status == "HDR: On") color = Color.FromArgb(68, 195, 149);
                 else if (status == "HDR: Unavailable") color = Color.FromArgb(235, 126, 126);
@@ -154,9 +155,9 @@ namespace LocalHdrMenu {
                     } else if (item.Name == "Displays") {
                         g.DrawRectangle(pen,1,2,14,10);
                         g.DrawLine(pen,8,12,8,15); g.DrawLine(pen,5,15,11,15);
-                    } else if (item.Name == "ExitAction" || item.Name == "HdrAction") {
+                    } else if (item.Name == "ExitAction") {
                         g.DrawArc(pen,2,2,12,12,-45,270); g.DrawLine(pen,8,0.5f,8,7);
-                    } else if (item.Name == "HdrStatus") {
+                    } else if (item.Name == "HdrStatus" || item.Name == "HdrAction") {
                         g.DrawEllipse(pen,1,1,14,14);
                         if (status == "HDR: Unavailable") {
                             g.DrawLine(pen,5,5,11,11); g.DrawLine(pen,11,5,5,11);
