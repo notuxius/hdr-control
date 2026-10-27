@@ -52,6 +52,8 @@ function Set-HdrTrayState($State) {
         foreach ($line in $State.Details) {
             $item = New-Object LocalHdrMenu.TrayStatusItem
             $item.Text = $line
+            $item.Name = 'HdrStatus'
+            $item.Tag = $line.Substring($line.LastIndexOf('HDR: ', [StringComparison]::Ordinal))
             $item.Enabled = $false
             $item.Padding = $script:hdrTray.Displays.Padding
             [void]$script:hdrTray.Displays.DropDownItems.Add($item)
@@ -150,6 +152,7 @@ function Initialize-HdrTray {
     $script:hdrTray.Menu.AnchorIcon = $script:hdrTray.Icon
     $script:hdrTray.ControlsMenu.AnchorIcon = $script:hdrTray.Icon
     $script:hdrTray.Menu.ShowActionIcons = $true
+    $script:hdrTray.ControlsMenu.ShowActionIcons = $true
     [void]$script:hdrTray.ControlsMenu.Items.Add($script:hdrTray.Status)
     [void]$script:hdrTray.ControlsMenu.Items.Add($script:hdrTray.Displays)
     [void]$script:hdrTray.ControlsMenu.Items.Add($script:hdrTray.CommandSeparator)
@@ -161,11 +164,14 @@ function Initialize-HdrTray {
     [void]$script:hdrTray.Menu.Items.Add((New-Object Windows.Forms.ToolStripSeparator))
     [void]$script:hdrTray.Menu.Items.Add($script:hdrTray.Exit)
     $script:hdrTray.Command.Name = 'HdrAction'
+    $script:hdrTray.Status.Name = 'HdrStatus'
+    $script:hdrTray.Displays.Name = 'Displays'
     $script:hdrTray.RightStatus.Name = 'HdrStatus'
     $script:hdrTray.HdrSettings.Name = 'HdrSettings'
     $script:hdrTray.DisplaySettings.Name = 'DisplaySettings'
     $script:hdrTray.Exit.Name = 'ExitAction'
     $script:hdrTray.Displays.DropDown = New-Object LocalHdrMenu.TrayPopupMenu
+    $script:hdrTray.Displays.DropDown.ShowActionIcons = $true
     $script:hdrTray.Command.Font = $script:hdrTray.ActionFont
     [LocalHdrMenu.TrayMenuTheme]::Apply($script:hdrTray.Menu, $script:hdrTray.MenuFont)
     [LocalHdrMenu.TrayMenuTheme]::Apply($script:hdrTray.ControlsMenu, $script:hdrTray.MenuFont)

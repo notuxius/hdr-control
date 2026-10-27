@@ -127,10 +127,11 @@ namespace LocalHdrMenu {
                 TextFormatFlags.NoPrefix | TextFormatFlags.NoPadding | TextFormatFlags.EndEllipsis);
         }
         static void DrawGlyph(Graphics g, ToolStripItem item, int left, Color color) {
+            string status = item.Tag as string ?? item.Text;
             if (!Contrast && item.Name == "HdrStatus") {
-                if (item.Text == "HDR: Off") color = Color.FromArgb(227, 190, 44);
-                else if (item.Text == "HDR: On") color = Color.FromArgb(68, 195, 149);
-                else if (item.Text == "HDR: Unavailable") color = Color.FromArgb(235, 126, 126);
+                if (status == "HDR: Off") color = Color.FromArgb(227, 190, 44);
+                else if (status == "HDR: On") color = Color.FromArgb(68, 195, 149);
+                else if (status == "HDR: Unavailable") color = Color.FromArgb(235, 126, 126);
             }
             var saved = g.Save();
             try {
@@ -144,18 +145,18 @@ namespace LocalHdrMenu {
                     if (item.Name == "HdrSettings") {
                         g.DrawPolygon(pen, new PointF[] { new PointF(6,1), new PointF(7.5f,5), new PointF(11,6.5f), new PointF(7.5f,8), new PointF(6,12), new PointF(4.5f,8), new PointF(1,6.5f), new PointF(4.5f,5) });
                         g.DrawLine(pen,13,10,13,15); g.DrawLine(pen,10.5f,12.5f,15.5f,12.5f);
-                    } else if (item.Name == "DisplaySettings") {
+                    } else if (item.Name == "DisplaySettings" || item.Name == "Displays") {
                         g.DrawRectangle(pen,1,2,14,10);
                         g.DrawLine(pen,8,12,8,15); g.DrawLine(pen,5,15,11,15);
-                    } else if (item.Name == "ExitAction") {
+                    } else if (item.Name == "ExitAction" || item.Name == "HdrAction") {
                         g.DrawArc(pen,2,2,12,12,-45,270); g.DrawLine(pen,8,0.5f,8,7);
                     } else if (item.Name == "HdrStatus") {
                         g.DrawEllipse(pen,1,1,14,14);
-                        if (item.Text == "HDR: Unavailable") {
+                        if (status == "HDR: Unavailable") {
                             g.DrawLine(pen,5,5,11,11); g.DrawLine(pen,11,5,5,11);
-                        } else if (item.Text == "HDR: On") {
+                        } else if (status == "HDR: On") {
                             g.DrawLines(pen,new PointF[] {new PointF(4,8),new PointF(7,11),new PointF(12,5)});
-                        } else if (item.Text == "HDR: Mixed") {
+                        } else if (status == "HDR: Mixed") {
                             using (var brush = new SolidBrush(color)) { g.FillPie(brush,4,4,8,8,-90,180); }
                         } else { g.DrawLine(pen,4.5f,8,11.5f,8); }
                     }
