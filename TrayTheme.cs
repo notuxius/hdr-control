@@ -128,6 +128,8 @@ namespace LocalHdrMenu {
         }
         static void DrawGlyph(Graphics g, ToolStripItem item, int left, Color color) {
             string status = item.Tag as string ?? item.Text;
+            bool highlighted = item.Enabled && item.Selected;
+            Color background = Contrast ? (highlighted ? SystemColors.Highlight : SystemColors.Menu) : (highlighted ? Hover : Surface);
             if (!Contrast && item.Name == "HdrStatus") {
                 if (status == "HDR: Off") color = Color.FromArgb(227, 190, 44);
                 else if (status == "HDR: On") color = Color.FromArgb(68, 195, 149);
@@ -144,8 +146,12 @@ namespace LocalHdrMenu {
                     pen.LineJoin = LineJoin.Round;
                     if (item.Name == "HdrSettings") {
                         g.DrawPolygon(pen, new PointF[] { new PointF(6,1), new PointF(7.5f,5), new PointF(11,6.5f), new PointF(7.5f,8), new PointF(6,12), new PointF(4.5f,8), new PointF(1,6.5f), new PointF(4.5f,5) });
-                        g.DrawLine(pen,13,10,13,15); g.DrawLine(pen,10.5f,12.5f,15.5f,12.5f);
-                    } else if (item.Name == "DisplaySettings" || item.Name == "Displays") {
+                        DrawSettingsGear(g, color, background, false);
+                    } else if (item.Name == "DisplaySettings") {
+                        g.DrawRectangle(pen,1,2,12,9);
+                        g.DrawLine(pen,7,11,7,14); g.DrawLine(pen,4,14,9,14);
+                        DrawSettingsGear(g, color, background, true);
+                    } else if (item.Name == "Displays") {
                         g.DrawRectangle(pen,1,2,14,10);
                         g.DrawLine(pen,8,12,8,15); g.DrawLine(pen,5,15,11,15);
                     } else if (item.Name == "ExitAction" || item.Name == "HdrAction") {
@@ -162,6 +168,20 @@ namespace LocalHdrMenu {
                     }
                 }
             } finally { g.Restore(saved); }
+        }
+        static void DrawSettingsGear(Graphics g, Color color, Color background, bool clearBehind) {
+            var gear = new PointF[24];
+            for (int i = 0; i < gear.Length; i++) {
+                double angle = i * Math.PI / 12;
+                float radius = i % 4 == 1 || i % 4 == 2 ? 3.4f : 2.5f;
+                gear[i] = new PointF(12.2f + radius * (float)Math.Cos(angle), 12.2f + radius * (float)Math.Sin(angle));
+            }
+            using (var backdrop = new SolidBrush(background))
+            using (var fill = new SolidBrush(color)) {
+                if (clearBehind) g.FillEllipse(backdrop,7.9f,7.9f,8.6f,8.6f);
+                g.FillPolygon(fill,gear);
+                g.FillEllipse(backdrop,10.95f,10.95f,2.5f,2.5f);
+            }
         }
         protected override void OnRenderSeparator(ToolStripSeparatorRenderEventArgs e) {
             int inset = Px(e.Graphics, 12);
