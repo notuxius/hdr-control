@@ -2,7 +2,7 @@
 
 One desktop right-click action: **Enable HDR** when HDR is off and **Disable HDR** when it is on. With Nilesoft Shell, the action appears directly above **Display settings**.
 
-The desktop entry uses the same softer monitor icons as the tray: green for on, yellow for off, and red for unavailable. Nilesoft shows **HDR: Unavailable** when no active display supports HDR. The native Windows entry stays hidden in that state.
+The desktop entry uses the same softer sparkle icons as the tray: green for on, yellow for off, and red for unavailable. Nilesoft shows **HDR: Unavailable** when no active display supports HDR. The native Windows entry stays hidden in that state.
 
 The label follows changes made through Windows Settings, Win+Alt+B, or other apps. A background helper checks Windows display state every two seconds and starts when you sign in. Clicking the menu sets the requested state explicitly and checks that Windows applied it.
 
@@ -10,7 +10,7 @@ The label follows changes made through Windows Settings, Win+Alt+B, or other app
 
 The same helper also shows an HDR icon in the notification area (it may initially appear inside the hidden-icons arrow). Hover over it for current status.
 
-The monitor icon contains white, yellow, and blue stars. A **green check** means HDR is enabled; a **yellow minus** means HDR is off; a **red X** means HDR is unavailable or its state cannot currently be read. With mixed displays, the icon is green when at least one display has HDR enabled; the tooltip and menu show **HDR: Mixed**. The icon refreshes along with the status.
+The tray icon has a colored sparkle, a smaller white sparkle, and a status badge. A **green check** means HDR is enabled; a **yellow minus** means HDR is off; a **red X** means HDR is unavailable or its state cannot currently be read. With mixed displays, the icon is green when at least one display has HDR enabled; the tooltip and menu show **HDR: Mixed**. The icon refreshes along with the status.
 
 Both menus open centered above the tray icon, shifting inward near screen edges to stay visible. The icon's position is queried each time; the cursor is a fallback only if Windows cannot locate the icon. They use a compact dark style with rounded corners, larger Segoe UI text, spacious rows, and clear hover states. Display details use the same style, and Windows high-contrast colors take precedence when enabled.
 
