@@ -17,12 +17,12 @@ Set-ItemProperty -LiteralPath $menuKey -Name Owner -Value $owner
 function Display($supported,$enabled) { [pscustomobject]@{HdrSupported=$supported;HdrEnabled=$enabled} }
 try {
     foreach ($case in @(
-        @{Displays=@((Display $true $false));Label='Enable HDR';Icon='HdrDisabled.ico';Hidden=$false},
-        @{Displays=@((Display $true $true));Label='Disable HDR';Icon='HdrEnabled.ico';Hidden=$false},
-        @{Displays=@((Display $true $true),(Display $true $false));Label='Enable HDR';Icon='HdrEnabled.ico';Hidden=$false},
-        @{Displays=@((Display $false $false));Label='HDR: Unavailable';Icon='HdrUnavailable.ico';Hidden=$true},
-        @{Displays=@();Label='HDR: Unavailable';Icon='HdrUnavailable.ico';Hidden=$true},
-        @{Displays=@((Display $true $false));Label='Enable HDR';Icon='HdrDisabled.ico';Hidden=$false}
+        @{Displays=@((Display $true $false));Label='Enable HDR';Icon='HdrEnableAction.ico';Hidden=$false},
+        @{Displays=@((Display $true $true));Label='Disable HDR';Icon='HdrDisableAction.ico';Hidden=$false},
+        @{Displays=@((Display $true $true),(Display $true $false));Label='Enable HDR';Icon='HdrEnableAction.ico';Hidden=$false},
+        @{Displays=@((Display $false $false));Label='HDR: Unavailable';Icon='HdrUnavailableAction.ico';Hidden=$true},
+        @{Displays=@();Label='HDR: Unavailable';Icon='HdrUnavailableAction.ico';Hidden=$true},
+        @{Displays=@((Display $true $false));Label='Enable HDR';Icon='HdrEnableAction.ico';Hidden=$false}
     )) {
         Sync-HdrMenu $case.Displays
         $entry=Get-ItemProperty -LiteralPath $menuKey

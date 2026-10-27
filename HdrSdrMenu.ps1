@@ -20,9 +20,9 @@ function Sync-HdrMenu($Displays) {
     $nextAction = if ($enableNext) { 'On' } else { 'Off' }
     # Shared storage avoids packaged-app redirection of AppData and HKCU.
     # Nilesoft reads this file each time it opens the menu.
-    $iconName = if ($unavailable) { 'HdrUnavailable.ico' }
-        elseif (@($capable | Where-Object HdrEnabled).Count -gt 0) { 'HdrEnabled.ico' }
-        else { 'HdrDisabled.ico' }
+    $iconName = if ($unavailable) { 'HdrUnavailableAction.ico' }
+        elseif ($enableNext) { 'HdrEnableAction.ico' }
+        else { 'HdrDisableAction.ico' }
     $stateFiles = [ordered]@{
         'MenuIcon.txt' = $iconName
         'MenuLabel.txt' = $(if ($unavailable) { 'HDR: Unavailable' } else { $label })
