@@ -36,7 +36,7 @@ function Set-HdrTrayState($State) {
         foreach ($item in @($script:hdrTray.Displays.DropDownItems)) { $item.Dispose() }
         $script:hdrTray.Displays.DropDownItems.Clear()
         foreach ($line in $State.Details) {
-            $item = New-Object Windows.Forms.ToolStripMenuItem
+            $item = New-Object LocalHdrMenu.TrayStatusItem
             $item.Text = $line
             $item.Enabled = $false
             $item.Padding = $script:hdrTray.Displays.Padding
@@ -107,7 +107,7 @@ function Initialize-HdrTray {
         Menu = New-Object Windows.Forms.ContextMenuStrip
         ControlsMenu = New-Object Windows.Forms.ContextMenuStrip
         ShowMenuMethod = [Windows.Forms.NotifyIcon].GetMethod('ShowContextMenu', [Reflection.BindingFlags]'Instance,NonPublic')
-        Status = New-Object Windows.Forms.ToolStripMenuItem
+        Status = New-Object LocalHdrMenu.TrayStatusItem
         Command = New-Object Windows.Forms.ToolStripMenuItem
         Displays = New-Object Windows.Forms.ToolStripMenuItem('Displays')
         HdrSettings = New-Object Windows.Forms.ToolStripMenuItem('HDR settings')

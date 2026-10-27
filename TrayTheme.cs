@@ -4,6 +4,9 @@ using System.Drawing.Drawing2D;
 using System.Windows.Forms;
 
 namespace LocalHdrMenu {
+    public sealed class TrayStatusItem : ToolStripMenuItem {
+        public override bool CanSelect { get { return false; } }
+    }
     // Keep native ToolStrip menus for keyboard navigation and tray dismissal.
     public sealed class TrayMenuRenderer : ToolStripProfessionalRenderer {
         static readonly Color Surface = Color.FromArgb(32, 34, 39);
@@ -30,7 +33,14 @@ namespace LocalHdrMenu {
             e.Graphics.Clear(Contrast ? SystemColors.Menu : Surface);
         }
         protected override void OnRenderImageMargin(ToolStripRenderEventArgs e) { }
+        void ClearRow(ToolStripItemRenderEventArgs e) {
+            using (var brush = new SolidBrush(Contrast ? SystemColors.Menu : Surface)) {
+                e.Graphics.FillRectangle(brush, new Rectangle(Point.Empty, e.Item.Size));
+            }
+        }
         protected override void OnRenderMenuItemBackground(ToolStripItemRenderEventArgs e) {
+            // Repaint unselected rows too, removing any previous hover fill.
+            ClearRow(e);
             if (!e.Item.Enabled || !e.Item.Selected) return;
             var bounds = new Rectangle(0, 1, e.Item.Width-1, e.Item.Height-2);
             e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
