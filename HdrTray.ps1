@@ -7,7 +7,7 @@ if (-not ('LocalHdrMenu.TrayMenuTheme' -as [type])) {
 function Get-HdrTrayState($Displays) {
     $capable = @($Displays | Where-Object HdrSupported)
     $enabled = @($capable | Where-Object HdrEnabled).Count
-    $status = if (-not $capable.Count) { 'HDR unavailable' }
+    $status = if (-not $capable.Count) { 'HDR: Unavailable' }
         elseif ($enabled -eq $capable.Count) { 'HDR: On' }
         elseif ($enabled -eq 0) { 'HDR: Off' }
         else { 'HDR: Mixed' }
@@ -36,6 +36,10 @@ function Set-HdrTrayState($State) {
     $script:hdrTray.Command.Text = if ($State.Available) { $State.Command } else { 'Enable HDR' }
     $script:hdrTray.Command.Tag = $State.Action
     $script:hdrTray.Command.Enabled = $State.Available -and $null -eq $script:hdrTray.Pending
+    $script:hdrTray.ControlsMenu.SuspendLayout()
+    $script:hdrTray.Command.Available = $State.Available
+    $script:hdrTray.CommandSeparator.Available = $State.Available
+    $script:hdrTray.ControlsMenu.ResumeLayout($true)
     $details = $State.Details -join "`n"
     if ($details -ne $script:hdrTray.DetailsText) {
         foreach ($item in @($script:hdrTray.Displays.DropDownItems)) { $item.Dispose() }
@@ -68,7 +72,7 @@ function Update-HdrTray {
         try { Sync-HdrMenu $displays } catch { }
     } catch {
         Set-HdrTrayState ([pscustomobject]@{
-            Status='HDR: Status unavailable'; IconState='Disabled'; Available=$false; Action='On'; Command='Enable HDR'; Details=@()
+            Status='HDR: Unavailable'; IconState='Disabled'; Available=$false; Action='On'; Command='Enable HDR'; Details=@()
         })
     }
 }
@@ -115,6 +119,7 @@ function Initialize-HdrTray {
         ShowMenuMethod = [Windows.Forms.NotifyIcon].GetMethod('ShowContextMenu', [Reflection.BindingFlags]'Instance,NonPublic')
         Status = New-Object LocalHdrMenu.TrayStatusItem
         Command = New-Object Windows.Forms.ToolStripMenuItem
+        CommandSeparator = New-Object Windows.Forms.ToolStripSeparator
         Displays = New-Object Windows.Forms.ToolStripMenuItem('Displays')
         HdrSettings = New-Object Windows.Forms.ToolStripMenuItem('HDR settings')
         DisplaySettings = New-Object Windows.Forms.ToolStripMenuItem('Display settings')
@@ -136,7 +141,7 @@ function Initialize-HdrTray {
     $script:hdrTray.ControlsMenu.ShowImageMargin = $false
     [void]$script:hdrTray.ControlsMenu.Items.Add($script:hdrTray.Status)
     [void]$script:hdrTray.ControlsMenu.Items.Add($script:hdrTray.Displays)
-    [void]$script:hdrTray.ControlsMenu.Items.Add((New-Object Windows.Forms.ToolStripSeparator))
+    [void]$script:hdrTray.ControlsMenu.Items.Add($script:hdrTray.CommandSeparator)
     [void]$script:hdrTray.ControlsMenu.Items.Add($script:hdrTray.Command)
     [void]$script:hdrTray.Menu.Items.Add($script:hdrTray.HdrSettings)
     [void]$script:hdrTray.Menu.Items.Add($script:hdrTray.DisplaySettings)

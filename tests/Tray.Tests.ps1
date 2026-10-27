@@ -68,19 +68,25 @@ try {
     [LocalHdrMenu.DisplayApi]::Displays = @((Display 'SDR only' $false $false))
     Update-HdrTray
     Assert (-not $script:hdrTray.Command.Enabled) 'Unsupported display has an enabled command'
+    Assert ($script:hdrTray.Status.Text -eq 'HDR: Unavailable') 'Unavailable caption is incorrect'
+    Assert (-not $script:hdrTray.Command.Available) 'Unsupported display should hide the HDR action'
+    Assert (-not $script:hdrTray.CommandSeparator.Available) 'Hidden action should not leave a separator'
     Assert ($script:hdrTray.Icon.Icon.Handle -eq $script:hdrTray.DisabledIcon.Handle) 'Unsupported display retained an enabled icon'
     Assert ($script:hdrTray.Displays.DropDownItems.Count -eq 1) 'Stale display entry remained'
     [LocalHdrMenu.DisplayApi]::Displays = @()
     Update-HdrTray
     Assert (-not $script:hdrTray.Displays.Enabled) 'Empty display list is enabled'
+    Assert (-not $script:hdrTray.Command.Available) 'No displays should hide the HDR action'
     [LocalHdrMenu.DisplayApi]::Fail = $true
     Update-HdrTray
-    Assert ($script:hdrTray.Status.Text -eq 'HDR: Status unavailable') 'Transient failure left stale status'
+    Assert ($script:hdrTray.Status.Text -eq 'HDR: Unavailable') 'Transient failure left stale status'
+    Assert (-not $script:hdrTray.Command.Available) 'Unreadable HDR state should hide the action'
     Assert (-not $script:hdrTray.Command.Enabled) 'Transient failure left action enabled'
     [LocalHdrMenu.DisplayApi]::Fail = $false
     [LocalHdrMenu.DisplayApi]::Displays = @((Display 'Primary' $true $false))
     Update-HdrTray
     Assert ($script:hdrTray.Command.Enabled) 'Tray failed to recover after display read failure'
+    Assert ($script:hdrTray.Command.Available -and $script:hdrTray.CommandSeparator.Available) 'HDR action did not reappear on recovery'
     $script:hdrTray.HdrSettings.PerformClick()
     Assert ($script:requestedUri -eq 'ms-settings:display-hdr') 'HDR settings link incorrect'
     $script:hdrTray.DisplaySettings.PerformClick()

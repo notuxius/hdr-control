@@ -15,7 +15,7 @@ Both menus use a compact dark style with rounded corners, larger Segoe UI text, 
 **Left-click** the icon for:
 
 - **HDR: On / Off / Mixed**, plus a **Displays** submenu with each display's status.
-- **Enable HDR / Disable HDR**, matching the current state. The action affects all HDR-capable displays and is disabled when none are available.
+- **Enable HDR / Disable HDR**, matching the current state. The action affects all HDR-capable displays. When HDR is unavailable, the header reads **HDR: Unavailable** and the action is hidden. It reappears automatically when HDR becomes available.
 
 **Right-click** the icon for:
 
