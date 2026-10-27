@@ -127,8 +127,11 @@ namespace LocalHdrMenu {
                 TextFormatFlags.NoPrefix | TextFormatFlags.NoPadding | TextFormatFlags.EndEllipsis);
         }
         static void DrawGlyph(Graphics g, ToolStripItem item, int left, Color color) {
-            if (!Contrast && item.Name == "HdrStatus" && item.Text == "HDR: Off")
-                color = Color.FromArgb(227, 190, 44);
+            if (!Contrast && item.Name == "HdrStatus") {
+                if (item.Text == "HDR: Off") color = Color.FromArgb(227, 190, 44);
+                else if (item.Text == "HDR: On") color = Color.FromArgb(68, 195, 149);
+                else if (item.Text == "HDR: Unavailable") color = Color.FromArgb(235, 126, 126);
+            }
             var saved = g.Save();
             try {
                 float scale = g.DpiX / 96f;
