@@ -4,6 +4,11 @@ using System.Drawing.Drawing2D;
 using System.Windows.Forms;
 
 namespace LocalHdrMenu {
+    public sealed class TrayPopupMenu : ContextMenuStrip {
+        Padding surfacePadding = new Padding(6);
+        protected override Padding DefaultPadding { get { return surfacePadding; } }
+        public void SetSurfacePadding(Padding value) { surfacePadding = value; Padding = value; }
+    }
     public sealed class TrayStatusItem : ToolStripMenuItem {
         public override bool CanSelect { get { return false; } }
     }
@@ -42,7 +47,8 @@ namespace LocalHdrMenu {
             // Repaint unselected rows too, removing any previous hover fill.
             ClearRow(e);
             if (!e.Item.Enabled || !e.Item.Selected) return;
-            var bounds = new Rectangle(0, 1, e.Item.Width-1, e.Item.Height-2);
+            int inset = Px(e.Graphics, 6);
+            var bounds = new Rectangle(inset, 1, e.Item.Width-inset*2, e.Item.Height-2);
             e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
             using (var path = Round(bounds, Px(e.Graphics, 5)))
             using (var brush = new SolidBrush(Contrast ? SystemColors.Highlight : Hover)) {
@@ -52,7 +58,15 @@ namespace LocalHdrMenu {
         protected override void OnRenderItemText(ToolStripItemTextRenderEventArgs e) {
             if (Contrast) e.TextColor = !e.Item.Enabled ? SystemColors.GrayText : e.Item.Selected ? SystemColors.HighlightText : SystemColors.MenuText;
             else e.TextColor = !e.Item.Enabled ? Muted : e.Item.Name == "HdrAction" ? Accent : Text;
-            TextRenderer.DrawText(e.Graphics, e.Text, e.TextFont, e.TextRectangle, e.TextColor, e.TextFormat);
+            // The stock text rectangle is based on the compact native row
+            // metrics, not our taller rows. Center against the actual row.
+            int inset = Px(e.Graphics, 18);
+            var submenu = e.Item as ToolStripDropDownItem;
+            int arrowSpace = submenu != null && submenu.HasDropDownItems ? Px(e.Graphics, 14) : 0;
+            var bounds = new Rectangle(inset, 0, Math.Max(1, e.Item.Width-inset*2-arrowSpace), e.Item.Height);
+            TextRenderer.DrawText(e.Graphics, e.Text, e.TextFont, bounds, e.TextColor,
+                TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.SingleLine |
+                TextFormatFlags.NoPrefix | TextFormatFlags.NoPadding | TextFormatFlags.EndEllipsis);
         }
         protected override void OnRenderSeparator(ToolStripSeparatorRenderEventArgs e) {
             int inset = Px(e.Graphics, 12);
@@ -89,14 +103,19 @@ namespace LocalHdrMenu {
             menu.Font = font;
             menu.BackColor = SystemInformation.HighContrast ? SystemColors.Menu : Color.FromArgb(32, 34, 39);
             menu.ForeColor = SystemColors.MenuText;
-            menu.Padding = new Padding(edge);
             menu.MinimumSize = new Size((int)Math.Round(240 * scale), 0);
             var dropdown = menu as ToolStripDropDownMenu;
             if (dropdown != null) { dropdown.ShowImageMargin = false; dropdown.ShowCheckMargin = false; }
-            foreach (ToolStripItem item in menu.Items) {
-                item.Padding = item is ToolStripSeparator ? new Padding(0, edge/2, 0, edge/2)
-                    : new Padding(edge*2, edge+1, edge*2, edge+1);
-            }
+            // Native menu layout recalculates narrow item widths when a popup
+            // opens. A vertical flow preserves equal full-width rows instead.
+            menu.LayoutStyle = ToolStripLayoutStyle.Flow;
+            menu.AutoSize = false;
+            var flow = (FlowLayoutSettings)menu.LayoutSettings;
+            flow.FlowDirection = FlowDirection.TopDown;
+            flow.WrapContents = false;
+            var popup = menu as TrayPopupMenu;
+            if (popup != null) popup.SetSurfacePadding(new Padding(edge));
+            else menu.Padding = new Padding(edge);
             bool layingOut = false;
             menu.Layout += delegate {
                 if (layingOut) return;
@@ -105,15 +124,22 @@ namespace LocalHdrMenu {
                     int width = (int)Math.Round(240 * scale);
                     foreach (ToolStripItem item in menu.Items) {
                         if (!(item is ToolStripSeparator)) {
-                            width = Math.Max(width, TextRenderer.MeasureText(item.Text, item.Font).Width + item.Padding.Horizontal + edge*6);
+                            width = Math.Max(width, TextRenderer.MeasureText(item.Text, item.Font).Width + edge*10);
                         }
                     }
                     menu.MinimumSize = new Size(width, 0);
+                    int totalHeight = menu.Padding.Vertical;
                     foreach (ToolStripItem item in menu.Items) {
-                        int height = item is ToolStripSeparator ? edge*2 : Math.Max((int)Math.Round(34*scale), item.Font.Height + item.Padding.Vertical);
+                        int height = item is ToolStripSeparator ? edge*2 : Math.Max((int)Math.Round(34*scale), item.Font.Height + (int)Math.Round(16*scale));
+                        item.Padding = Padding.Empty;
+                        item.Margin = Padding.Empty;
                         item.AutoSize = false;
-                        item.Size = new Size(width-menu.Padding.Horizontal, height);
+                        // ToolStripMenuItem anchors at x=0 even with popup
+                        // padding; reserve the horizontal inset in rendering.
+                        item.Size = new Size(width, height);
+                        if (item.Available) totalHeight += height;
                     }
+                    menu.Size = new Size(width, totalHeight);
                 } finally { layingOut = false; }
             };
             menu.SizeChanged += delegate {
@@ -123,6 +149,7 @@ namespace LocalHdrMenu {
                 }
                 if (old != null) old.Dispose();
             };
+            menu.PerformLayout();
         }
     }
 }

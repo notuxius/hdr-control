@@ -105,8 +105,8 @@ function Initialize-HdrTray {
     [Windows.Forms.Application]::EnableVisualStyles()
     $script:hdrTray = @{
         Icon = New-Object Windows.Forms.NotifyIcon
-        Menu = New-Object Windows.Forms.ContextMenuStrip
-        ControlsMenu = New-Object Windows.Forms.ContextMenuStrip
+        Menu = New-Object LocalHdrMenu.TrayPopupMenu
+        ControlsMenu = New-Object LocalHdrMenu.TrayPopupMenu
         ShowMenuMethod = [Windows.Forms.NotifyIcon].GetMethod('ShowContextMenu', [Reflection.BindingFlags]'Instance,NonPublic')
         Status = New-Object LocalHdrMenu.TrayStatusItem
         Command = New-Object Windows.Forms.ToolStripMenuItem
@@ -136,6 +136,7 @@ function Initialize-HdrTray {
     [void]$script:hdrTray.Menu.Items.Add((New-Object Windows.Forms.ToolStripSeparator))
     [void]$script:hdrTray.Menu.Items.Add($script:hdrTray.Exit)
     $script:hdrTray.Command.Name = 'HdrAction'
+    $script:hdrTray.Displays.DropDown = New-Object LocalHdrMenu.TrayPopupMenu
     $script:hdrTray.Command.Font = $script:hdrTray.ActionFont
     [LocalHdrMenu.TrayMenuTheme]::Apply($script:hdrTray.Menu, $script:hdrTray.MenuFont)
     [LocalHdrMenu.TrayMenuTheme]::Apply($script:hdrTray.ControlsMenu, $script:hdrTray.MenuFont)
