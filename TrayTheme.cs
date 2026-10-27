@@ -6,8 +6,31 @@ using System.Windows.Forms;
 namespace LocalHdrMenu {
     public sealed class TrayPopupMenu : ContextMenuStrip {
         Padding surfacePadding = new Padding(6);
+        Point popupAnchor;
+        public bool CenterAboveCursor { get; set; }
         protected override Padding DefaultPadding { get { return surfacePadding; } }
         public void SetSurfacePadding(Padding value) { surfacePadding = value; Padding = value; }
+        public static Point CenteredLocation(Point anchor, Size size, Rectangle workArea, int gap) {
+            int x = anchor.X - size.Width / 2;
+            int y = anchor.Y - size.Height - gap;
+            return new Point(
+                Math.Max(workArea.Left, Math.Min(x, workArea.Right - size.Width)),
+                Math.Max(workArea.Top, Math.Min(y, workArea.Bottom - size.Height)));
+        }
+        protected override void OnOpening(System.ComponentModel.CancelEventArgs e) {
+            popupAnchor = Cursor.Position;
+            base.OnOpening(e);
+        }
+        protected override void OnOpened(EventArgs e) {
+            // NotifyIcon still owns focus and dismissal. Reposition only the
+            // root popup after native placement and final menu layout.
+            if (CenterAboveCursor) {
+                int gap;
+                using (var g = CreateGraphics()) { gap = (int)Math.Round(6 * g.DpiY / 96); }
+                Location = CenteredLocation(popupAnchor, Size, Screen.FromPoint(popupAnchor).WorkingArea, gap);
+            }
+            base.OnOpened(e);
+        }
     }
     public sealed class TrayStatusItem : ToolStripMenuItem {
         public override bool CanSelect { get { return false; } }

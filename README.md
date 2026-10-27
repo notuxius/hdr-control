@@ -10,7 +10,7 @@ The same helper also shows an HDR icon in the notification area (it may initiall
 
 The monitor icon contains white, yellow, and blue stars. A **green check** means HDR is enabled; a **gray minus** means HDR is off; a **red X** means HDR is unavailable or its state cannot currently be read. With mixed displays, the icon is green when at least one display has HDR enabled; the tooltip and menu show **HDR: Mixed**. The icon refreshes along with the status.
 
-Both menus use a compact dark style with rounded corners, larger Segoe UI text, spacious rows, and clear hover states. The HDR action uses an accent color. Display details use the same style, and Windows high-contrast colors take precedence when enabled.
+Both menus open centered above the cursor, shifting inward near screen edges to stay visible. They use a compact dark style with rounded corners, larger Segoe UI text, spacious rows, and clear hover states. The HDR action uses an accent color. Display details use the same style, and Windows high-contrast colors take precedence when enabled.
 
 **Left-click** the icon for:
 

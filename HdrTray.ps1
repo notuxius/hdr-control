@@ -144,6 +144,8 @@ function Initialize-HdrTray {
     $script:hdrTray.Icon.Text = 'HDR Context Menu'
     $script:hdrTray.Menu.ShowImageMargin = $false
     $script:hdrTray.ControlsMenu.ShowImageMargin = $false
+    $script:hdrTray.Menu.CenterAboveCursor = $true
+    $script:hdrTray.ControlsMenu.CenterAboveCursor = $true
     [void]$script:hdrTray.ControlsMenu.Items.Add($script:hdrTray.Status)
     [void]$script:hdrTray.ControlsMenu.Items.Add($script:hdrTray.Displays)
     [void]$script:hdrTray.ControlsMenu.Items.Add($script:hdrTray.CommandSeparator)

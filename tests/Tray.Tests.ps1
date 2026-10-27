@@ -5,6 +5,7 @@ $installedIcon = Join-Path $repo 'HdrSdrMenu.ico'
 $installedScript = Join-Path $repo 'HdrSdrMenu.ps1'
 . (Join-Path $repo 'HdrTray.ps1')
 $script:realStartHdrChange = ${function:Start-HdrChange}
+$script:realShowHdrControls = ${function:Show-HdrControls}
 Add-Type @'
 namespace LocalHdrMenu {
     public static class DisplayApi {
@@ -95,6 +96,32 @@ try {
     $script:hdrTray.DisplaySettings.PerformClick()
     Assert ($script:requestedUri -eq 'ms-settings:display') 'Display settings link incorrect'
     Assert ($script:syncCount -eq 6) 'Desktop label synchronization stopped'
+    # Placement covers both screen edges and monitors with negative coordinates.
+    $size = [Drawing.Size]::new(240,126)
+    $area = [Drawing.Rectangle]::new(0,0,1920,1040)
+    foreach ($case in @(@(960,1080,840,914),@(5,1000,0,868),@(1915,1000,1680,868),@(960,5,840,0))) {
+        $point = [LocalHdrMenu.TrayPopupMenu]::CenteredLocation([Drawing.Point]::new($case[0],$case[1]),$size,$area,6)
+        Assert ($point.X -eq $case[2] -and $point.Y -eq $case[3]) 'Popup should be centered above the cursor and clamped to the work area'
+    }
+    $point = [LocalHdrMenu.TrayPopupMenu]::CenteredLocation([Drawing.Point]::new(-960,1000),$size,[Drawing.Rectangle]::new(-1920,0,1920,1040),6)
+    Assert ($point.X -eq -1080 -and $point.Y -eq 868) 'Negative monitor coordinates should be preserved'
+    Assert (-not $script:hdrTray.Displays.DropDown.CenterAboveCursor) 'Display submenu must retain native side placement'
+    # Use the real NotifyIcon popup path, including its final native positioning.
+    foreach ($supported in @($true,$false)) {
+        [LocalHdrMenu.DisplayApi]::Displays = @((Display 'Primary' $supported $false))
+        foreach ($leftClick in @($true,$false)) {
+            $anchor = [Windows.Forms.Cursor]::Position
+            if ($leftClick) { & $script:realShowHdrControls; $menu=$script:hdrTray.ControlsMenu }
+            else { [void]$script:hdrTray.ShowMenuMethod.Invoke($script:hdrTray.Icon,$null); $menu=$script:hdrTray.Menu }
+            try {
+                [Windows.Forms.Application]::DoEvents()
+                $graphics=$menu.CreateGraphics()
+                try { $gap=[int][Math]::Round(6*$graphics.DpiY/96) } finally { $graphics.Dispose() }
+                $expected=[LocalHdrMenu.TrayPopupMenu]::CenteredLocation($anchor,$menu.Size,[Windows.Forms.Screen]::FromPoint($anchor).WorkingArea,$gap)
+                Assert ($menu.Visible -and $menu.Location -eq $expected) 'Native tray popup did not retain centered placement'
+            } finally { $menu.Close() }
+        }
+    }
     # Exercise the real launch validation without starting a process or changing HDR.
     function Start-Process {
         param($FilePath,$ArgumentList,$WindowStyle,[switch]$PassThru)
@@ -110,5 +137,5 @@ try {
         & $script:realStartHdrChange 'Toggle'
         Assert ($script:launches -eq 1) 'Repeated middle clicks must not start overlapping changes'
     } finally { $script:hdrTray.Pending=$null }
-    'PASS: left/right/middle click routing, toggle launch and concurrency guard, menu contents, state updates, recovery, and settings links.'
+    'PASS: click routing, native popup placement and screen edges, toggle concurrency, menu contents, state updates, recovery, and settings links.'
 } finally { Close-HdrTray }
