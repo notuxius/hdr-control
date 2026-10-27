@@ -147,13 +147,10 @@ namespace LocalHdrMenu {
                     if (item.Name == "HdrSettings") {
                         g.DrawPolygon(pen, new PointF[] { new PointF(6,1), new PointF(7.5f,5), new PointF(11,6.5f), new PointF(7.5f,8), new PointF(6,12), new PointF(4.5f,8), new PointF(1,6.5f), new PointF(4.5f,5) });
                         DrawSettingsGear(g, color, background, false);
-                    } else if (item.Name == "DisplaySettings") {
-                        g.DrawRectangle(pen,1,2,12,9);
-                        g.DrawLine(pen,7,11,7,14); g.DrawLine(pen,4,14,9,14);
-                        DrawSettingsGear(g, color, background, true);
-                    } else if (item.Name == "Displays") {
+                    } else if (item.Name == "DisplaySettings" || item.Name == "Displays") {
                         g.DrawRectangle(pen,1,2,14,10);
                         g.DrawLine(pen,8,12,8,15); g.DrawLine(pen,5,15,11,15);
+                        if (item.Name == "DisplaySettings") DrawSettingsGear(g, color, background, true);
                     } else if (item.Name == "ExitAction") {
                         g.DrawArc(pen,2,2,12,12,-45,270); g.DrawLine(pen,8,0.5f,8,7);
                     } else if (item.Name == "HdrStatus" || item.Name == "HdrAction") {
