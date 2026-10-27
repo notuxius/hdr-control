@@ -8,6 +8,8 @@ The label follows changes made through Windows Settings, Win+Alt+B, or other app
 
 The same helper also shows an HDR icon in the notification area (it may initially appear inside the hidden-icons arrow). Hover over it for current status.
 
+Both menus use a compact dark style with rounded corners, larger Segoe UI text, spacious rows, and clear hover states. The HDR action uses an accent color. Display details use the same style, and Windows high-contrast colors take precedence when enabled.
+
 **Left-click** the icon for:
 
 - **HDR: On / Off / Mixed**, plus a **Displays** submenu with each display's status.

@@ -1,5 +1,8 @@
 # Loaded by the existing Watch action after the display API is initialized.
 Add-Type -AssemblyName System.Windows.Forms, System.Drawing
+if (-not ('LocalHdrMenu.TrayMenuTheme' -as [type])) {
+    Add-Type -Path (Join-Path $PSScriptRoot 'TrayTheme.cs') -ReferencedAssemblies System.Windows.Forms,System.Drawing
+}
 
 function Get-HdrTrayState($Displays) {
     $capable = @($Displays | Where-Object HdrSupported)
@@ -36,6 +39,7 @@ function Set-HdrTrayState($State) {
             $item = New-Object Windows.Forms.ToolStripMenuItem
             $item.Text = $line
             $item.Enabled = $false
+            $item.Padding = $script:hdrTray.Displays.Padding
             [void]$script:hdrTray.Displays.DropDownItems.Add($item)
         }
         $script:hdrTray.DetailsText = $details
@@ -111,6 +115,8 @@ function Initialize-HdrTray {
         Exit = New-Object Windows.Forms.ToolStripMenuItem('Exit')
         Timer = New-Object Windows.Forms.Timer
         IconResource = New-Object Drawing.Icon($installedIcon)
+        MenuFont = New-Object Drawing.Font('Segoe UI',10)
+        ActionFont = New-Object Drawing.Font('Segoe UI Semibold',10)
         Pending = $null
         DetailsText = $null
     }
@@ -128,6 +134,11 @@ function Initialize-HdrTray {
     [void]$script:hdrTray.Menu.Items.Add($script:hdrTray.DisplaySettings)
     [void]$script:hdrTray.Menu.Items.Add((New-Object Windows.Forms.ToolStripSeparator))
     [void]$script:hdrTray.Menu.Items.Add($script:hdrTray.Exit)
+    $script:hdrTray.Command.Name = 'HdrAction'
+    $script:hdrTray.Command.Font = $script:hdrTray.ActionFont
+    [LocalHdrMenu.TrayMenuTheme]::Apply($script:hdrTray.Menu, $script:hdrTray.MenuFont)
+    [LocalHdrMenu.TrayMenuTheme]::Apply($script:hdrTray.ControlsMenu, $script:hdrTray.MenuFont)
+    [LocalHdrMenu.TrayMenuTheme]::Apply($script:hdrTray.Displays.DropDown, $script:hdrTray.MenuFont)
     $script:hdrTray.Command.add_Click({ Start-HdrChange ([string]$script:hdrTray.Command.Tag) })
     $script:hdrTray.HdrSettings.add_Click({ Open-HdrSettings 'ms-settings:display-hdr' })
     $script:hdrTray.DisplaySettings.add_Click({ Open-HdrSettings 'ms-settings:display' })
@@ -153,6 +164,8 @@ function Close-HdrTray {
     $script:hdrTray.Menu.Dispose()
     $script:hdrTray.ControlsMenu.Dispose()
     $script:hdrTray.IconResource.Dispose()
+    $script:hdrTray.MenuFont.Dispose()
+    $script:hdrTray.ActionFont.Dispose()
     if ($null -ne $script:hdrTray.Pending) { $script:hdrTray.Pending.Dispose() }
 }
 
