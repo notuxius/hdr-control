@@ -52,7 +52,7 @@ try {
     Update-HdrTray
     Assert ($script:hdrTray.Status.Text -eq 'HDR: Off') 'SDR status incorrect'
     Assert ($script:hdrTray.RightStatus.Text -eq 'HDR: Off' -and $script:hdrTray.Displays.DropDownItems[0].Text -eq 'Primary - HDR: Off') 'Off labels should be consistent across menus'
-    Assert ($script:hdrTray.Icon.Icon.Handle -eq $script:hdrTray.DisabledIcon.Handle) 'SDR should use the gray monitor icon'
+    Assert ($script:hdrTray.Icon.Icon.Handle -eq $script:hdrTray.DisabledIcon.Handle) 'SDR should use the yellow monitor icon'
     Assert ($script:hdrTray.Command.Text -eq 'Enable HDR') 'SDR command incorrect'
     $script:hdrTray.Command.PerformClick()
     Assert ($script:requestedAction -eq 'On') 'Enable did not request On'
@@ -95,7 +95,7 @@ try {
     [LocalHdrMenu.DisplayApi]::Displays = @((Display 'Primary' $true $false))
     Update-HdrTray
     Assert ($script:hdrTray.Command.Enabled) 'Tray failed to recover after display read failure'
-    Assert ($script:hdrTray.Icon.Icon.Handle -eq $script:hdrTray.DisabledIcon.Handle) 'Recovery to HDR off should restore the gray minus icon'
+    Assert ($script:hdrTray.Icon.Icon.Handle -eq $script:hdrTray.DisabledIcon.Handle) 'Recovery to HDR off should restore the yellow minus icon'
     Assert ($script:hdrTray.Command.Available -and $script:hdrTray.CommandSeparator.Available) 'HDR action did not reappear on recovery'
     $script:hdrTray.HdrSettings.PerformClick()
     Assert ($script:requestedUri -eq 'ms-settings:display-hdr') 'HDR settings link incorrect'
