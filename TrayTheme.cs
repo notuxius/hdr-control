@@ -145,8 +145,10 @@ namespace LocalHdrMenu {
                     pen.StartCap = pen.EndCap = LineCap.Round;
                     pen.LineJoin = LineJoin.Round;
                     if (item.Name == "HdrSettings") {
-                        g.DrawPolygon(pen, new PointF[] { new PointF(6,1), new PointF(7.5f,5), new PointF(11,6.5f), new PointF(7.5f,8), new PointF(6,12), new PointF(4.5f,8), new PointF(1,6.5f), new PointF(4.5f,5) });
-                        DrawSettingsGear(g, color, background, false);
+                        // Same filled sparkles and proportions as the 24px tray artwork.
+                        DrawSparkle(g,6,20f/3,16f/3,color);
+                        DrawSparkle(g,12,10f/3,2,Contrast || !item.Enabled ? color : Color.White);
+                        DrawSettingsGear(g, color, background, true);
                     } else if (item.Name == "DisplaySettings" || item.Name == "Displays") {
                         g.DrawRectangle(pen,1,2,14,10);
                         g.DrawLine(pen,8,12,8,15); g.DrawLine(pen,5,15,11,15);
@@ -165,6 +167,17 @@ namespace LocalHdrMenu {
                     }
                 }
             } finally { g.Restore(saved); }
+        }
+        static void DrawSparkle(Graphics g, float x, float y, float radius, Color color) {
+            float inset = radius * .32f;
+            using (var brush = new SolidBrush(color)) {
+                g.FillPolygon(brush,new PointF[] {
+                    new PointF(x,y-radius),new PointF(x+inset,y-inset),
+                    new PointF(x+radius,y),new PointF(x+inset,y+inset),
+                    new PointF(x,y+radius),new PointF(x-inset,y+inset),
+                    new PointF(x-radius,y),new PointF(x-inset,y-inset)
+                });
+            }
         }
         static void DrawSettingsGear(Graphics g, Color color, Color background, bool clearBehind) {
             var gear = new PointF[24];
