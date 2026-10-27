@@ -71,21 +71,24 @@ try {
     Assert ($script:hdrTray.Status.Text -eq 'HDR: Unavailable') 'Unavailable caption is incorrect'
     Assert (-not $script:hdrTray.Command.Available) 'Unsupported display should hide the HDR action'
     Assert (-not $script:hdrTray.CommandSeparator.Available) 'Hidden action should not leave a separator'
-    Assert ($script:hdrTray.Icon.Icon.Handle -eq $script:hdrTray.DisabledIcon.Handle) 'Unsupported display retained an enabled icon'
+    Assert ($script:hdrTray.Icon.Icon.Handle -eq $script:hdrTray.UnavailableIcon.Handle) 'Unsupported display should use the red X icon'
     Assert ($script:hdrTray.Displays.DropDownItems.Count -eq 1) 'Stale display entry remained'
     [LocalHdrMenu.DisplayApi]::Displays = @()
     Update-HdrTray
     Assert (-not $script:hdrTray.Displays.Enabled) 'Empty display list is enabled'
     Assert (-not $script:hdrTray.Command.Available) 'No displays should hide the HDR action'
+    Assert ($script:hdrTray.Icon.Icon.Handle -eq $script:hdrTray.UnavailableIcon.Handle) 'No displays should use the red X icon'
     [LocalHdrMenu.DisplayApi]::Fail = $true
     Update-HdrTray
     Assert ($script:hdrTray.Status.Text -eq 'HDR: Unavailable') 'Transient failure left stale status'
     Assert (-not $script:hdrTray.Command.Available) 'Unreadable HDR state should hide the action'
     Assert (-not $script:hdrTray.Command.Enabled) 'Transient failure left action enabled'
+    Assert ($script:hdrTray.Icon.Icon.Handle -eq $script:hdrTray.UnavailableIcon.Handle) 'Unreadable HDR state should use the red X icon'
     [LocalHdrMenu.DisplayApi]::Fail = $false
     [LocalHdrMenu.DisplayApi]::Displays = @((Display 'Primary' $true $false))
     Update-HdrTray
     Assert ($script:hdrTray.Command.Enabled) 'Tray failed to recover after display read failure'
+    Assert ($script:hdrTray.Icon.Icon.Handle -eq $script:hdrTray.DisabledIcon.Handle) 'Recovery to HDR off should restore the gray minus icon'
     Assert ($script:hdrTray.Command.Available -and $script:hdrTray.CommandSeparator.Available) 'HDR action did not reappear on recovery'
     $script:hdrTray.HdrSettings.PerformClick()
     Assert ($script:requestedUri -eq 'ms-settings:display-hdr') 'HDR settings link incorrect'

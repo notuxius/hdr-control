@@ -14,7 +14,7 @@ function Get-HdrTrayState($Displays) {
     $enableNext = $enabled -lt $capable.Count
     [pscustomobject]@{
         Status = $status
-        IconState = if ($enabled -gt 0) { 'Enabled' } else { 'Disabled' }
+        IconState = if (-not $capable.Count) { 'Unavailable' } elseif ($enabled -gt 0) { 'Enabled' } else { 'Disabled' }
         Command = if ($enableNext) { 'Enable HDR' } else { 'Disable HDR' }
         Action = if ($enableNext) { 'On' } else { 'Off' }
         Available = $capable.Count -gt 0
@@ -30,7 +30,11 @@ function Set-HdrTrayState($State) {
     $script:hdrTray.Status.Text = $State.Status
     $script:hdrTray.Icon.Text = 'HDR Context Menu - ' + $State.Status
     if ($script:hdrTray.CurrentIconState -ne $State.IconState) {
-        $script:hdrTray.Icon.Icon = if ($State.IconState -eq 'Enabled') { $script:hdrTray.EnabledIcon } else { $script:hdrTray.DisabledIcon }
+        $script:hdrTray.Icon.Icon = switch ($State.IconState) {
+            'Enabled' { $script:hdrTray.EnabledIcon }
+            'Disabled' { $script:hdrTray.DisabledIcon }
+            default { $script:hdrTray.UnavailableIcon }
+        }
         $script:hdrTray.CurrentIconState = $State.IconState
     }
     $script:hdrTray.Command.Text = if ($State.Available) { $State.Command } else { 'Enable HDR' }
@@ -72,7 +76,7 @@ function Update-HdrTray {
         try { Sync-HdrMenu $displays } catch { }
     } catch {
         Set-HdrTrayState ([pscustomobject]@{
-            Status='HDR: Unavailable'; IconState='Disabled'; Available=$false; Action='On'; Command='Enable HDR'; Details=@()
+            Status='HDR: Unavailable'; IconState='Unavailable'; Available=$false; Action='On'; Command='Enable HDR'; Details=@()
         })
     }
 }
@@ -127,14 +131,15 @@ function Initialize-HdrTray {
         Timer = New-Object Windows.Forms.Timer
         EnabledIcon = [Drawing.Icon]::new((Join-Path $PSScriptRoot 'HdrEnabled.ico'), [Windows.Forms.SystemInformation]::SmallIconSize)
         DisabledIcon = [Drawing.Icon]::new((Join-Path $PSScriptRoot 'HdrDisabled.ico'), [Windows.Forms.SystemInformation]::SmallIconSize)
-        CurrentIconState = 'Disabled'
+        UnavailableIcon = [Drawing.Icon]::new((Join-Path $PSScriptRoot 'HdrUnavailable.ico'), [Windows.Forms.SystemInformation]::SmallIconSize)
+        CurrentIconState = 'Unavailable'
         MenuFont = New-Object Drawing.Font('Segoe UI',10)
         ActionFont = New-Object Drawing.Font('Segoe UI Semibold',10)
         Pending = $null
         DetailsText = $null
     }
     $script:hdrTray.Status.Enabled = $false
-    $script:hdrTray.Icon.Icon = $script:hdrTray.DisabledIcon
+    $script:hdrTray.Icon.Icon = $script:hdrTray.UnavailableIcon
     $script:hdrTray.Icon.ContextMenuStrip = $script:hdrTray.Menu
     $script:hdrTray.Icon.Text = 'HDR Context Menu'
     $script:hdrTray.Menu.ShowImageMargin = $false
@@ -182,6 +187,7 @@ function Close-HdrTray {
     $script:hdrTray.ControlsMenu.Dispose()
     $script:hdrTray.EnabledIcon.Dispose()
     $script:hdrTray.DisabledIcon.Dispose()
+    $script:hdrTray.UnavailableIcon.Dispose()
     $script:hdrTray.MenuFont.Dispose()
     $script:hdrTray.ActionFont.Dispose()
     if ($null -ne $script:hdrTray.Pending) { $script:hdrTray.Pending.Dispose() }
