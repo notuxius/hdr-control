@@ -74,7 +74,6 @@ namespace LocalHdrMenu {
         static readonly Color Border = Color.FromArgb(67, 72, 81);
         static readonly Color Text = Color.FromArgb(239, 242, 247);
         static readonly Color Muted = Color.FromArgb(164, 174, 189);
-        static readonly Color Accent = Color.FromArgb(137, 194, 255);
         public TrayMenuRenderer() { RoundedEdges = false; }
         static bool Contrast { get { return SystemInformation.HighContrast; } }
         static int Px(Graphics g, float value) { return Math.Max(1, (int)Math.Round(value * g.DpiX / 96)); }
@@ -112,7 +111,7 @@ namespace LocalHdrMenu {
         }
         protected override void OnRenderItemText(ToolStripItemTextRenderEventArgs e) {
             if (Contrast) e.TextColor = !e.Item.Enabled ? SystemColors.GrayText : e.Item.Selected ? SystemColors.HighlightText : SystemColors.MenuText;
-            else e.TextColor = !e.Item.Enabled ? Muted : e.Item.Name == "HdrAction" ? Accent : Text;
+            else e.TextColor = !e.Item.Enabled ? Muted : Text;
             // The stock text rectangle is based on the compact native row
             // metrics, not our taller rows. Center against the actual row.
             int inset = Px(e.Graphics, 18);

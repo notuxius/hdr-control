@@ -136,7 +136,6 @@ function Initialize-HdrTray {
         UnavailableIcon = [Drawing.Icon]::new((Join-Path $PSScriptRoot 'HdrUnavailable.ico'), [Windows.Forms.SystemInformation]::SmallIconSize)
         CurrentIconState = 'Unavailable'
         MenuFont = New-Object Drawing.Font('Segoe UI',10)
-        ActionFont = New-Object Drawing.Font('Segoe UI Semibold',10)
         Pending = $null
         DetailsText = $null
     }
@@ -166,7 +165,6 @@ function Initialize-HdrTray {
     $script:hdrTray.Exit.Name = 'ExitAction'
     $script:hdrTray.Displays.DropDown = New-Object LocalHdrMenu.TrayPopupMenu
     $script:hdrTray.Displays.DropDown.ShowActionIcons = $true
-    $script:hdrTray.Command.Font = $script:hdrTray.ActionFont
     [LocalHdrMenu.TrayMenuTheme]::Apply($script:hdrTray.Menu, $script:hdrTray.MenuFont)
     [LocalHdrMenu.TrayMenuTheme]::Apply($script:hdrTray.ControlsMenu, $script:hdrTray.MenuFont)
     [LocalHdrMenu.TrayMenuTheme]::Apply($script:hdrTray.Displays.DropDown, $script:hdrTray.MenuFont)
@@ -201,7 +199,6 @@ function Close-HdrTray {
     $script:hdrTray.DisabledIcon.Dispose()
     $script:hdrTray.UnavailableIcon.Dispose()
     $script:hdrTray.MenuFont.Dispose()
-    $script:hdrTray.ActionFont.Dispose()
     if ($null -ne $script:hdrTray.Pending) { $script:hdrTray.Pending.Dispose() }
 }
 
