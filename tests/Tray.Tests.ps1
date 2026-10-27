@@ -48,23 +48,27 @@ try {
     [LocalHdrMenu.DisplayApi]::Displays = @((Display 'Primary' $true $false))
     Update-HdrTray
     Assert ($script:hdrTray.Status.Text -eq 'HDR: Off') 'SDR status incorrect'
+    Assert ($script:hdrTray.Icon.Icon.Handle -eq $script:hdrTray.DisabledIcon.Handle) 'SDR should use the gray monitor icon'
     Assert ($script:hdrTray.Command.Text -eq 'Enable HDR') 'SDR command incorrect'
     $script:hdrTray.Command.PerformClick()
     Assert ($script:requestedAction -eq 'On') 'Enable did not request On'
     [LocalHdrMenu.DisplayApi]::Displays = @((Display 'Primary' $true $true))
     Update-HdrTray
     Assert ($script:hdrTray.Status.Text -eq 'HDR: On') 'HDR status incorrect'
+    Assert ($script:hdrTray.Icon.Icon.Handle -eq $script:hdrTray.EnabledIcon.Handle) 'HDR should use the green monitor icon'
     Assert ($script:hdrTray.Icon.Text.EndsWith('HDR: On')) 'Tooltip did not update'
     $script:hdrTray.Command.PerformClick()
     Assert ($script:requestedAction -eq 'Off') 'Disable did not request Off'
     [LocalHdrMenu.DisplayApi]::Displays = @((Display 'Primary' $true $true),(Display 'Secondary' $true $false))
     Update-HdrTray
     Assert ($script:hdrTray.Status.Text -eq 'HDR: Mixed') 'Mixed status incorrect'
+    Assert ($script:hdrTray.Icon.Icon.Handle -eq $script:hdrTray.EnabledIcon.Handle) 'Mixed state should show HDR is enabled on a display'
     Assert ($script:hdrTray.Command.Tag -eq 'On') 'Mixed state should enable all'
     Assert ($script:hdrTray.Displays.DropDownItems.Count -eq 2) 'Per-display status missing'
     [LocalHdrMenu.DisplayApi]::Displays = @((Display 'SDR only' $false $false))
     Update-HdrTray
     Assert (-not $script:hdrTray.Command.Enabled) 'Unsupported display has an enabled command'
+    Assert ($script:hdrTray.Icon.Icon.Handle -eq $script:hdrTray.DisabledIcon.Handle) 'Unsupported display retained an enabled icon'
     Assert ($script:hdrTray.Displays.DropDownItems.Count -eq 1) 'Stale display entry remained'
     [LocalHdrMenu.DisplayApi]::Displays = @()
     Update-HdrTray

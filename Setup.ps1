@@ -70,7 +70,7 @@ try {
             Remove-Item -LiteralPath $importFile
         }
         if (Test-Path -LiteralPath $menuKey) { Remove-Item -LiteralPath $menuKey -Recurse }
-        foreach ($name in @('HdrSdrMenu.ps1','HdrTray.ps1','TrayTheme.cs','Start-Tray.vbs','Toggle-HdrSdr.vbs','HdrSdrMenu.ico','MenuLabel.txt','Setup.ps1','hdr-context-menu.nss','package.commit')) {
+        foreach ($name in @('HdrSdrMenu.ps1','HdrTray.ps1','TrayTheme.cs','Start-Tray.vbs','Toggle-HdrSdr.vbs','HdrSdrMenu.ico','HdrEnabled.ico','HdrDisabled.ico','MenuLabel.txt','Setup.ps1','hdr-context-menu.nss','package.commit')) {
             $path = Join-Path $installDir $name
             if (Test-Path -LiteralPath $path) { Remove-Item -LiteralPath $path }
         }
@@ -78,7 +78,7 @@ try {
         Write-Output 'HDR Context Menu removed. Configuration backups were retained.'
         return
     }
-    foreach ($name in @('HdrSdrMenu.ps1','HdrTray.ps1','TrayTheme.cs','Start-Tray.vbs','Toggle-HdrSdr.vbs','HdrSdrMenu.ico','hdr-context-menu.nss')) {
+    foreach ($name in @('HdrSdrMenu.ps1','HdrTray.ps1','TrayTheme.cs','Start-Tray.vbs','Toggle-HdrSdr.vbs','HdrSdrMenu.ico','HdrEnabled.ico','HdrDisabled.ico','hdr-context-menu.nss')) {
         if (-not (Test-Path -LiteralPath (Join-Path $PSScriptRoot $name))) { throw "Package file missing: $name" }
     }
     if ($installDir.Contains("'") -or $env:SystemRoot.Contains("'")) { throw 'Installation paths cannot contain apostrophes.' }
@@ -92,7 +92,7 @@ try {
     $acl.SetAccessRule($rule)
     Set-Acl -LiteralPath $installDir -AclObject $acl
     Stop-Helper
-    foreach ($name in @('HdrSdrMenu.ps1','HdrTray.ps1','TrayTheme.cs','Start-Tray.vbs','Toggle-HdrSdr.vbs','HdrSdrMenu.ico','Setup.ps1','hdr-context-menu.nss','package.commit')) {
+    foreach ($name in @('HdrSdrMenu.ps1','HdrTray.ps1','TrayTheme.cs','Start-Tray.vbs','Toggle-HdrSdr.vbs','HdrSdrMenu.ico','HdrEnabled.ico','HdrDisabled.ico','Setup.ps1','hdr-context-menu.nss','package.commit')) {
         $source = Join-Path $PSScriptRoot $name
         $destination = Join-Path $installDir $name
         if ((Test-Path -LiteralPath $source) -and [IO.Path]::GetFullPath($source) -ne [IO.Path]::GetFullPath($destination)) {
