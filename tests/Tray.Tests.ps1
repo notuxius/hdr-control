@@ -51,6 +51,7 @@ try {
     [LocalHdrMenu.DisplayApi]::Displays = @((Display 'Primary' $true $false))
     Update-HdrTray
     Assert ($script:hdrTray.Status.Text -eq 'HDR: Off') 'SDR status incorrect'
+    Assert ($script:hdrTray.Status.Available -and -not $script:hdrTray.Displays.Available) 'One display should show only the top status'
     Assert ($script:hdrTray.Displays.DropDownItems[0].Text -eq 'Primary - HDR: Off') 'Off labels should be consistent across menus'
     Assert ($script:hdrTray.Icon.Icon.Handle -eq $script:hdrTray.DisabledIcon.Handle) 'SDR should use the yellow monitor icon'
     Assert ($script:hdrTray.Command.Text -eq 'Enable HDR') 'SDR command incorrect'
@@ -67,6 +68,7 @@ try {
     [LocalHdrMenu.DisplayApi]::Displays = @((Display 'Primary' $true $true),(Display 'Secondary' $true $false))
     Update-HdrTray
     Assert ($script:hdrTray.Status.Text -eq 'HDR: Mixed') 'Mixed status incorrect'
+    Assert (-not $script:hdrTray.Status.Available -and $script:hdrTray.Displays.Available) 'Multiple displays should show the submenu instead of the top status'
     Assert ($script:hdrTray.Icon.Icon.Handle -eq $script:hdrTray.EnabledIcon.Handle) 'Mixed state should show HDR is enabled on a display'
     Assert ($script:hdrTray.Command.Tag -eq 'On') 'Mixed state should enable all'
     Assert ($script:hdrTray.Displays.DropDownItems.Count -eq 2) 'Per-display status missing'
@@ -74,6 +76,7 @@ try {
     Update-HdrTray
     Assert (-not $script:hdrTray.Command.Enabled) 'Unsupported display has an enabled command'
     Assert ($script:hdrTray.Status.Text -eq 'HDR: Unavailable') 'Unavailable caption is incorrect'
+    Assert ($script:hdrTray.Status.Available -and -not $script:hdrTray.Displays.Available) 'Returning to one display should restore the top status'
     Assert ($script:hdrTray.Displays.DropDownItems[0].Text -eq 'SDR only - HDR: Unavailable') 'Unavailable labels should be consistent across menus'
     Assert (-not $script:hdrTray.Command.Available) 'Unsupported display should hide the HDR action'
     Assert (-not $script:hdrTray.CommandSeparator.Available) 'Hidden action should not leave a separator'
@@ -82,6 +85,7 @@ try {
     [LocalHdrMenu.DisplayApi]::Displays = @()
     Update-HdrTray
     Assert (-not $script:hdrTray.Displays.Enabled) 'Empty display list is enabled'
+    Assert ($script:hdrTray.Status.Available -and -not $script:hdrTray.Displays.Available) 'No displays should retain the unavailable status without an empty submenu'
     Assert (-not $script:hdrTray.Command.Available) 'No displays should hide the HDR action'
     Assert ($script:hdrTray.Icon.Icon.Handle -eq $script:hdrTray.UnavailableIcon.Handle) 'No displays should use the red X icon'
     [LocalHdrMenu.DisplayApi]::Fail = $true

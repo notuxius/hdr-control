@@ -41,6 +41,10 @@ function Set-HdrTrayState($State) {
     $script:hdrTray.Command.Tag = $State.Action
     $script:hdrTray.Command.Enabled = $State.Available -and $null -eq $script:hdrTray.Pending
     $script:hdrTray.ControlsMenu.SuspendLayout()
+    $multipleDisplays = $State.Details.Count -gt 1
+    $script:hdrTray.Status.Available = -not $multipleDisplays
+    $script:hdrTray.Displays.Available = $multipleDisplays
+    if (-not $multipleDisplays) { $script:hdrTray.Displays.DropDown.Close() }
     $script:hdrTray.Command.Available = $State.Available
     $script:hdrTray.CommandSeparator.Available = $State.Available
     $script:hdrTray.ControlsMenu.ResumeLayout($true)
