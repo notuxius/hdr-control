@@ -20,9 +20,17 @@ function Sync-HdrMenu($Displays) {
     $nextAction = if ($enableNext) { 'On' } else { 'Off' }
     # Shared storage avoids packaged-app redirection of AppData and HKCU.
     # Nilesoft reads this file each time it opens the menu.
-    $stateFile = Join-Path $installDir 'MenuLabel.txt'
-    $stateLabel = if ($unavailable) { 'HDR unavailable' } else { $label }
-    if (-not [IO.File]::Exists($stateFile) -or [IO.File]::ReadAllText($stateFile) -ne $stateLabel) {
+    $iconName = if ($unavailable) { 'HdrUnavailable.ico' }
+        elseif (@($capable | Where-Object HdrEnabled).Count -gt 0) { 'HdrEnabled.ico' }
+        else { 'HdrDisabled.ico' }
+    $stateFiles = [ordered]@{
+        'MenuIcon.txt' = $iconName
+        'MenuLabel.txt' = $(if ($unavailable) { 'HDR: Unavailable' } else { $label })
+    }
+    foreach ($name in $stateFiles.Keys) {
+        $stateFile = Join-Path $installDir $name
+        $stateLabel = $stateFiles[$name]
+        if ([IO.File]::Exists($stateFile) -and [IO.File]::ReadAllText($stateFile) -eq $stateLabel) { continue }
         $pendingFile = Join-Path $installDir ('MenuLabel.' + [guid]::NewGuid().ToString('N') + '.tmp')
         [IO.File]::WriteAllText($pendingFile, $stateLabel, [Text.Encoding]::ASCII)
         try {
@@ -36,6 +44,10 @@ function Sync-HdrMenu($Displays) {
     if (-not (Test-Path -LiteralPath $menuKey)) { return }
     $entry = Get-ItemProperty -LiteralPath $menuKey
     if ($entry.Owner -ne $owner) { return }
+    $iconPath = Join-Path $installDir $iconName
+    if ($entry.Icon -ne $iconPath) {
+        Set-ItemProperty -LiteralPath $menuKey -Name Icon -Value $iconPath
+    }
     $command = '"{0}" //NoLogo "{1}" {2}' -f (Join-Path $env:SystemRoot 'System32\wscript.exe'), $installedLauncher, $nextAction
     if ($unavailable) {
         if ($null -eq $entry.LegacyDisable) {

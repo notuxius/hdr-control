@@ -70,7 +70,7 @@ try {
             Remove-Item -LiteralPath $importFile
         }
         if (Test-Path -LiteralPath $menuKey) { Remove-Item -LiteralPath $menuKey -Recurse }
-        foreach ($name in @('HdrSdrMenu.ps1','HdrTray.ps1','TrayTheme.cs','Start-Tray.vbs','Toggle-HdrSdr.vbs','HdrSdrMenu.ico','HdrEnabled.ico','HdrDisabled.ico','HdrUnavailable.ico','MenuLabel.txt','Setup.ps1','hdr-context-menu.nss','package.commit')) {
+        foreach ($name in @('HdrSdrMenu.ps1','HdrTray.ps1','TrayTheme.cs','Start-Tray.vbs','Toggle-HdrSdr.vbs','HdrSdrMenu.ico','HdrEnabled.ico','HdrDisabled.ico','HdrUnavailable.ico','MenuLabel.txt','MenuIcon.txt','Setup.ps1','hdr-context-menu.nss','package.commit')) {
             $path = Join-Path $installDir $name
             if (Test-Path -LiteralPath $path) { Remove-Item -LiteralPath $path }
         }

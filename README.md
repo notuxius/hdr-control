@@ -2,6 +2,8 @@
 
 One desktop right-click action: **Enable HDR** when HDR is off and **Disable HDR** when it is on. With Nilesoft Shell, the action appears directly above **Display settings**.
 
+The desktop entry uses the same softer monitor icons as the tray: green for on, yellow for off, and red for unavailable. Nilesoft shows **HDR: Unavailable** when no active display supports HDR. The native Windows entry stays hidden in that state.
+
 The label follows changes made through Windows Settings, Win+Alt+B, or other apps. A background helper checks Windows display state every two seconds and starts when you sign in. Clicking the menu sets the requested state explicitly and checks that Windows applied it.
 
 ## Tray icon
