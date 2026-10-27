@@ -74,10 +74,11 @@ function Open-HdrSettings([string]$Uri) {
 }
 
 function Start-HdrChange([string]$NextAction) {
-    if ($null -ne $script:hdrTray.Pending -or $NextAction -notin @('On','Off')) { return }
+    if ($null -ne $script:hdrTray.Pending -or $NextAction -notin @('On','Off','Toggle')) { return }
     try {
         # Keep the menu responsive while Windows changes display mode. Use the
-        # explicit action offered by the menu, never a possibly stale toggle.
+        # explicit action offered by the menu. Middle-click uses Toggle, which
+        # reads the current Windows state in the child before choosing On/Off.
         $script:hdrTray.Pending = Start-Process -FilePath (Join-Path $PSHOME 'powershell.exe') -ArgumentList (
             '-NoLogo -NoProfile -NonInteractive -STA -WindowStyle Hidden -ExecutionPolicy Bypass -File "{0}" -Action {1}' -f $installedScript,$NextAction
         ) -WindowStyle Hidden -PassThru
@@ -145,6 +146,9 @@ function Initialize-HdrTray {
     $script:hdrTray.Icon.add_MouseClick({
         param($sender, $eventArgs)
         if ($eventArgs.Button -eq [Windows.Forms.MouseButtons]::Left) { Show-HdrControls }
+        elseif ($eventArgs.Button -eq [Windows.Forms.MouseButtons]::Middle) {
+            Start-HdrChange 'Toggle'
+        }
     })
     $script:hdrTray.ControlsMenu.add_Opening({ Update-HdrTray })
     $script:hdrTray.Menu.add_Opening({ $script:hdrTray.ControlsMenu.Close() })

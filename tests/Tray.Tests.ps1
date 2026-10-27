@@ -4,6 +4,7 @@ $repo = Split-Path $PSScriptRoot
 $installedIcon = Join-Path $repo 'HdrSdrMenu.ico'
 $installedScript = Join-Path $repo 'HdrSdrMenu.ps1'
 . (Join-Path $repo 'HdrTray.ps1')
+$script:realStartHdrChange = ${function:Start-HdrChange}
 Add-Type @'
 namespace LocalHdrMenu {
     public static class DisplayApi {
@@ -39,6 +40,7 @@ try {
         [void]$mouseClick.Invoke($script:hdrTray.Icon,@($eventArgs.PSObject.BaseObject))
     }
     Assert ($script:controlsOpened -eq 1) 'Controls should open only on left click'
+    Assert ($script:requestedAction -eq 'Toggle') 'Middle click must request a live HDR toggle'
     $script:requestedUri=$null
     $doubleClick = [Windows.Forms.NotifyIcon].GetMethod('OnDoubleClick',[Reflection.BindingFlags]'Instance,NonPublic')
     [void]$doubleClick.Invoke($script:hdrTray.Icon,@([EventArgs]::Empty))
@@ -80,5 +82,20 @@ try {
     $script:hdrTray.DisplaySettings.PerformClick()
     Assert ($script:requestedUri -eq 'ms-settings:display') 'Display settings link incorrect'
     Assert ($script:syncCount -eq 6) 'Desktop label synchronization stopped'
-    'PASS: left/right click routing, separate menu contents, on/off commands, tooltip, mixed displays, hotplug, unavailable state, recovery, and settings links.'
+    # Exercise the real launch validation without starting a process or changing HDR.
+    function Start-Process {
+        param($FilePath,$ArgumentList,$WindowStyle,[switch]$PassThru)
+        $script:launches++
+        $script:launchArguments=$ArgumentList
+        [pscustomobject]@{HasExited=$false}
+    }
+    $script:launches=0
+    try {
+        & $script:realStartHdrChange 'Toggle'
+        Assert ($script:launchArguments -match '-Action Toggle$') 'Toggle did not reach the display helper'
+        Assert (-not $script:hdrTray.Command.Enabled) 'HDR action should be disabled during a change'
+        & $script:realStartHdrChange 'Toggle'
+        Assert ($script:launches -eq 1) 'Repeated middle clicks must not start overlapping changes'
+    } finally { $script:hdrTray.Pending=$null }
+    'PASS: left/right/middle click routing, toggle launch and concurrency guard, menu contents, state updates, recovery, and settings links.'
 } finally { Close-HdrTray }
