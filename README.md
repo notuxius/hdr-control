@@ -6,14 +6,19 @@ The label follows changes made through Windows Settings, Win+Alt+B, or other app
 
 ## Tray icon
 
-The same helper also shows an HDR icon in the notification area (it may initially appear inside the hidden-icons arrow). Hover over it for current status, or right-click it for:
+The same helper also shows an HDR icon in the notification area (it may initially appear inside the hidden-icons arrow). Hover over it for current status.
+
+**Left-click** the icon for:
 
 - **HDR: On / Off / Mixed**, plus a **Displays** submenu with each display's status.
 - **Enable HDR / Disable HDR**, matching the current state. The action affects all HDR-capable displays and is disabled when none are available.
-- **HDR settings** and **Display settings** shortcuts. Double-clicking the icon opens HDR settings too.
+
+**Right-click** the icon for:
+
+- **HDR settings** and **Display settings** shortcuts.
 - **Exit**, which closes the helper until the next sign-in. Automatic desktop label refresh also stops until the helper is restarted.
 
-Run **Start-Tray.vbs** to restart it without signing out. Only one helper runs per session. Transient display disconnects show an unavailable status and recover automatically. Status updates every two seconds and whenever the tray menu opens. The HDR shortcut uses `ms-settings:display-hdr`; Display settings is also available for Windows versions that do not expose the dedicated HDR page.
+Run **Start-Tray.vbs** to restart it without signing out. Only one helper runs per session. Transient display disconnects show an unavailable status and recover automatically. Status updates every two seconds and whenever the left-click menu opens. The HDR shortcut uses `ms-settings:display-hdr`; Display settings is also available for Windows versions that do not expose the dedicated HDR page.
 
 ## Install
 

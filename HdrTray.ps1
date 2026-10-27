@@ -84,11 +84,25 @@ function Start-HdrChange([string]$NextAction) {
     }
 }
 
+function Show-HdrControls {
+    $script:hdrTray.Menu.Close()
+    # Reuse NotifyIcon's native popup handling for focus, taskbar placement,
+    # keyboard navigation, and dismissal when clicking elsewhere (.NET 4.x).
+    $script:hdrTray.Icon.ContextMenuStrip = $script:hdrTray.ControlsMenu
+    try {
+        [void]$script:hdrTray.ShowMenuMethod.Invoke($script:hdrTray.Icon, $null)
+    } finally {
+        $script:hdrTray.Icon.ContextMenuStrip = $script:hdrTray.Menu
+    }
+}
+
 function Initialize-HdrTray {
     [Windows.Forms.Application]::EnableVisualStyles()
     $script:hdrTray = @{
         Icon = New-Object Windows.Forms.NotifyIcon
         Menu = New-Object Windows.Forms.ContextMenuStrip
+        ControlsMenu = New-Object Windows.Forms.ContextMenuStrip
+        ShowMenuMethod = [Windows.Forms.NotifyIcon].GetMethod('ShowContextMenu', [Reflection.BindingFlags]'Instance,NonPublic')
         Status = New-Object Windows.Forms.ToolStripMenuItem
         Command = New-Object Windows.Forms.ToolStripMenuItem
         Displays = New-Object Windows.Forms.ToolStripMenuItem('Displays')
@@ -105,11 +119,11 @@ function Initialize-HdrTray {
     $script:hdrTray.Icon.ContextMenuStrip = $script:hdrTray.Menu
     $script:hdrTray.Icon.Text = 'HDR Context Menu'
     $script:hdrTray.Menu.ShowImageMargin = $false
-    [void]$script:hdrTray.Menu.Items.Add($script:hdrTray.Status)
-    [void]$script:hdrTray.Menu.Items.Add($script:hdrTray.Displays)
-    [void]$script:hdrTray.Menu.Items.Add((New-Object Windows.Forms.ToolStripSeparator))
-    [void]$script:hdrTray.Menu.Items.Add($script:hdrTray.Command)
-    [void]$script:hdrTray.Menu.Items.Add((New-Object Windows.Forms.ToolStripSeparator))
+    $script:hdrTray.ControlsMenu.ShowImageMargin = $false
+    [void]$script:hdrTray.ControlsMenu.Items.Add($script:hdrTray.Status)
+    [void]$script:hdrTray.ControlsMenu.Items.Add($script:hdrTray.Displays)
+    [void]$script:hdrTray.ControlsMenu.Items.Add((New-Object Windows.Forms.ToolStripSeparator))
+    [void]$script:hdrTray.ControlsMenu.Items.Add($script:hdrTray.Command)
     [void]$script:hdrTray.Menu.Items.Add($script:hdrTray.HdrSettings)
     [void]$script:hdrTray.Menu.Items.Add($script:hdrTray.DisplaySettings)
     [void]$script:hdrTray.Menu.Items.Add((New-Object Windows.Forms.ToolStripSeparator))
@@ -117,8 +131,12 @@ function Initialize-HdrTray {
     $script:hdrTray.Command.add_Click({ Start-HdrChange ([string]$script:hdrTray.Command.Tag) })
     $script:hdrTray.HdrSettings.add_Click({ Open-HdrSettings 'ms-settings:display-hdr' })
     $script:hdrTray.DisplaySettings.add_Click({ Open-HdrSettings 'ms-settings:display' })
-    $script:hdrTray.Icon.add_DoubleClick({ Open-HdrSettings 'ms-settings:display-hdr' })
-    $script:hdrTray.Menu.add_Opening({ Update-HdrTray })
+    $script:hdrTray.Icon.add_MouseClick({
+        param($sender, $eventArgs)
+        if ($eventArgs.Button -eq [Windows.Forms.MouseButtons]::Left) { Show-HdrControls }
+    })
+    $script:hdrTray.ControlsMenu.add_Opening({ Update-HdrTray })
+    $script:hdrTray.Menu.add_Opening({ $script:hdrTray.ControlsMenu.Close() })
     $script:hdrTray.Exit.add_Click({ [Windows.Forms.Application]::ExitThread() })
     $script:hdrTray.Timer.Interval = 2000
     $script:hdrTray.Timer.add_Tick({
@@ -133,6 +151,7 @@ function Close-HdrTray {
     $script:hdrTray.Timer.Dispose()
     $script:hdrTray.Icon.Dispose()
     $script:hdrTray.Menu.Dispose()
+    $script:hdrTray.ControlsMenu.Dispose()
     $script:hdrTray.IconResource.Dispose()
     if ($null -ne $script:hdrTray.Pending) { $script:hdrTray.Pending.Dispose() }
 }

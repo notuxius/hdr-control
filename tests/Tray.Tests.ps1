@@ -19,6 +19,7 @@ namespace LocalHdrMenu {
 function Sync-HdrMenu($Displays) { $script:syncCount++ }
 function Start-HdrChange([string]$NextAction) { $script:requestedAction = $NextAction }
 function Open-HdrSettings([string]$Uri) { $script:requestedUri = $Uri }
+function Show-HdrControls { $script:controlsOpened++ }
 function Assert($Condition, [string]$Message) { if (-not $Condition) { throw $Message } }
 function Display([string]$Name, [bool]$Supported, [bool]$Enabled) {
     [pscustomobject]@{Name=$Name;HdrSupported=$Supported;HdrEnabled=$Enabled}
@@ -26,6 +27,22 @@ function Display([string]$Name, [bool]$Supported, [bool]$Enabled) {
 $script:syncCount=0
 Initialize-HdrTray
 try {
+    Assert ($null -ne $script:hdrTray.ShowMenuMethod) 'Native tray popup method unavailable'
+    Assert ($script:hdrTray.Icon.ContextMenuStrip -eq $script:hdrTray.Menu) 'Right click not bound to settings menu'
+    Assert (($script:hdrTray.Menu.Items | Where-Object {$_ -is [Windows.Forms.ToolStripMenuItem]} | ForEach-Object Text) -join '|' -eq 'HDR settings|Display settings|Exit') 'Right-click menu contains wrong items'
+    Assert ($script:hdrTray.ControlsMenu.Items.Contains($script:hdrTray.Displays)) 'Displays missing from left-click menu'
+    Assert ($script:hdrTray.ControlsMenu.Items.Contains($script:hdrTray.Command)) 'HDR action missing from left-click menu'
+    $mouseClick = [Windows.Forms.NotifyIcon].GetMethod('OnMouseClick',[Reflection.BindingFlags]'Instance,NonPublic')
+    $script:controlsOpened=0
+    foreach ($button in @([Windows.Forms.MouseButtons]::Left,[Windows.Forms.MouseButtons]::Right,[Windows.Forms.MouseButtons]::Middle)) {
+        $eventArgs = New-Object Windows.Forms.MouseEventArgs($button,1,0,0,0)
+        [void]$mouseClick.Invoke($script:hdrTray.Icon,@($eventArgs.PSObject.BaseObject))
+    }
+    Assert ($script:controlsOpened -eq 1) 'Controls should open only on left click'
+    $script:requestedUri=$null
+    $doubleClick = [Windows.Forms.NotifyIcon].GetMethod('OnDoubleClick',[Reflection.BindingFlags]'Instance,NonPublic')
+    [void]$doubleClick.Invoke($script:hdrTray.Icon,@([EventArgs]::Empty))
+    Assert ($null -eq $script:requestedUri) 'Double click must not unexpectedly open settings'
     [LocalHdrMenu.DisplayApi]::Displays = @((Display 'Primary' $true $false))
     Update-HdrTray
     Assert ($script:hdrTray.Status.Text -eq 'HDR: Off') 'SDR status incorrect'
@@ -63,5 +80,5 @@ try {
     $script:hdrTray.DisplaySettings.PerformClick()
     Assert ($script:requestedUri -eq 'ms-settings:display') 'Display settings link incorrect'
     Assert ($script:syncCount -eq 6) 'Desktop label synchronization stopped'
-    'PASS: on/off commands, tooltip, mixed displays, hotplug, unavailable state, recovery, and settings links.'
+    'PASS: left/right click routing, separate menu contents, on/off commands, tooltip, mixed displays, hotplug, unavailable state, recovery, and settings links.'
 } finally { Close-HdrTray }
