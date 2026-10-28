@@ -16,6 +16,9 @@ if (-not ([Security.Principal.WindowsPrincipal]::new($identity)).IsInRole([Secur
 $installDir = Join-Path $env:ProgramData 'HdrSdrMenu'
 $runtime = Join-Path $installDir 'HdrSdrMenu.ps1'
 $launcher = Join-Path $installDir 'Toggle-HdrSdr.vbs'
+$shortcutPath = Join-Path ([Environment]::GetFolderPath('Programs')) 'HDR Context Menu.lnk'
+$shortcutTarget = Join-Path $env:SystemRoot 'System32\wscript.exe'
+$shortcutArguments = '//NoLogo "{0}"' -f (Join-Path $installDir 'Start-Tray.vbs')
 $taskName = 'HdrSdrMenu-Label-' + $env:USERNAME
 $menuKey = 'HKCU:\Software\Classes\DesktopBackground\Shell\HdrToggle.LocalScript'
 $owner = 'HdrSdrMenu.LocalScript.v1'
@@ -58,9 +61,19 @@ try {
     if ((Test-Path -LiteralPath $menuKey) -and (Get-ItemProperty -LiteralPath $menuKey).Owner -ne $owner) {
         throw 'An unrelated menu entry already uses this registry key.'
     }
+    $shortcutShell = New-Object -ComObject WScript.Shell
+    $ownsShortcut = $false
+    if (Test-Path -LiteralPath $shortcutPath) {
+        $existingShortcut = $shortcutShell.CreateShortcut($shortcutPath)
+        $ownsShortcut = $existingShortcut.TargetPath -eq $shortcutTarget -and $existingShortcut.Arguments -eq $shortcutArguments
+        if ($Action -eq 'Install' -and -not $ownsShortcut) {
+            throw 'An unrelated Start menu shortcut already uses HDR Context Menu.lnk.'
+        }
+    }
     if ($Action -eq 'Uninstall') {
         Stop-Helper
         Unregister-ScheduledTask -TaskName $taskName -Confirm:$false -ErrorAction SilentlyContinue
+        if ($ownsShortcut) { Remove-Item -LiteralPath $shortcutPath }
         if ($hasShell) {
             $text = [IO.File]::ReadAllText($config)
             $updated = [regex]::Replace($text, '(?m)^\s*import [\x27\x22]imports/hdr-context-menu\.nss[\x27\x22]\s*\r?\n?', '')
@@ -134,6 +147,15 @@ try {
     $principal = New-ScheduledTaskPrincipal -UserId $identity.User.Value -LogonType Interactive -RunLevel Limited
     $settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -ExecutionTimeLimit ([TimeSpan]::Zero) -MultipleInstances IgnoreNew
     Register-ScheduledTask -TaskName $taskName -Action $taskAction -Trigger $trigger -Principal $principal -Settings $settings -Force | Out-Null
+    New-Item -ItemType Directory -Path (Split-Path $shortcutPath) -Force | Out-Null
+    $shortcut = $shortcutShell.CreateShortcut($shortcutPath)
+    $shortcut.TargetPath = $shortcutTarget
+    $shortcut.Arguments = $shortcutArguments
+    $shortcut.WorkingDirectory = $installDir
+    $shortcut.IconLocation = (Join-Path $installDir 'HdrEnabled.ico') + ',0'
+    $shortcut.Description = 'Start the HDR tray icon and desktop menu helper'
+    $shortcut.WindowStyle = 7
+    $shortcut.Save()
     Start-ScheduledTask -TaskName $taskName
     Refresh-Shell
     Write-Output 'HDR Context Menu installed. Reopen the desktop right-click menu.'

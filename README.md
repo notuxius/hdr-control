@@ -26,7 +26,7 @@ Both menus open centered above the tray icon, shifting inward near screen edges 
 
 **Middle-click** (press the mouse wheel) to toggle HDR directly, using the current Windows display state. Further clicks are ignored while a change is in progress. As with the menu command, this affects all active HDR-capable displays.
 
-Run **Start-Tray.vbs** to restart it without signing out. Only one helper runs per session. Transient display disconnects show an unavailable status and recover automatically. Status updates every two seconds and whenever the left-click menu opens. The HDR shortcut uses `ms-settings:display-hdr`; Display settings is also available for Windows versions that do not expose the dedicated HDR page.
+Open **HDR Context Menu** from the Start menu (or run **Start-Tray.vbs**) to restart it without signing out. Only one helper runs per session. Transient display disconnects show an unavailable status and recover automatically. Status updates every two seconds and whenever the left-click menu opens. The HDR shortcut uses `ms-settings:display-hdr`; Display settings is also available for Windows versions that do not expose the dedicated HDR page.
 
 ## Install
 
@@ -43,7 +43,7 @@ This package is intended for a single interactive user per PC. Install with that
 
 ## Uninstall
 
-Run **Uninstall.cmd**, or run the installed `Setup.ps1 -Action Uninstall`. This removes the menu, logon helper, and installed program files. Nilesoft configuration backups remain under `%ProgramData%\HdrSdrMenu\backups`. Other Nilesoft customizations are preserved.
+Run **Uninstall.cmd**, or run the installed `Setup.ps1 -Action Uninstall`. This removes the desktop menu, Start menu shortcut, logon helper, and installed program files. Nilesoft configuration backups remain under `%ProgramData%\HdrSdrMenu\backups`. Other Nilesoft customizations are preserved.
 
 ## How it works
 
