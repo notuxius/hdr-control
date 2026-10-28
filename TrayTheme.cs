@@ -17,6 +17,14 @@ namespace LocalHdrMenu {
         static extern int Shell_NotifyIconGetRect(ref Identifier identifier, out NativeRect bounds);
         static readonly FieldInfo WindowField = typeof(NotifyIcon).GetField("window", BindingFlags.Instance | BindingFlags.NonPublic);
         static readonly FieldInfo IdField = typeof(NotifyIcon).GetField("id", BindingFlags.Instance | BindingFlags.NonPublic);
+        static readonly MethodInfo UpdateIconMethod = typeof(NotifyIcon).GetMethod("UpdateIcon", BindingFlags.Instance | BindingFlags.NonPublic);
+        public static void Refresh(NotifyIcon icon) {
+            // The Icon setter ignores identical instances. .NET Framework's
+            // update path republishes the current image without removing the
+            // tray entry, changing its position, or allocating another HICON.
+            if (icon != null && icon.Visible && UpdateIconMethod != null)
+                UpdateIconMethod.Invoke(icon, new object[] { true });
+        }
         public static bool TryGetBounds(NotifyIcon icon, out Rectangle bounds) {
             bounds = Rectangle.Empty;
             if (icon == null || !icon.Visible || WindowField == null || IdField == null) return false;
@@ -127,12 +135,12 @@ namespace LocalHdrMenu {
         }
         static void DrawGlyph(Graphics g, ToolStripItem item, int left, Color color) {
             string status = item.Tag as string ?? item.Text;
-            if (item.Name == "HdrAction") status = status == "On" ? "HDR: On" : "HDR: Off";
+            if (item.Name == "HdrAction") status = status == "On" ? "HDR: Enabled" : "HDR: Disabled";
             bool highlighted = item.Enabled && item.Selected;
             Color background = Contrast ? (highlighted ? SystemColors.Highlight : SystemColors.Menu) : (highlighted ? Hover : Surface);
             if (!Contrast && (item.Name == "HdrStatus" || (item.Name == "HdrAction" && item.Enabled))) {
-                if (status == "HDR: Off") color = Color.FromArgb(227, 190, 44);
-                else if (status == "HDR: On") color = Color.FromArgb(68, 195, 149);
+                if (status == "HDR: Disabled") color = Color.FromArgb(227, 190, 44);
+                else if (status == "HDR: Enabled") color = Color.FromArgb(68, 195, 149);
                 else if (status == "HDR: Unavailable") color = Color.FromArgb(235, 126, 126);
             }
             var saved = g.Save();
@@ -159,7 +167,7 @@ namespace LocalHdrMenu {
                         g.DrawEllipse(pen,1,1,14,14);
                         if (status == "HDR: Unavailable") {
                             g.DrawLine(pen,5,5,11,11); g.DrawLine(pen,11,5,5,11);
-                        } else if (status == "HDR: On") {
+                        } else if (status == "HDR: Enabled") {
                             g.DrawLines(pen,new PointF[] {new PointF(4,8),new PointF(7,11),new PointF(12,5)});
                         } else if (status == "HDR: Mixed") {
                             using (var brush = new SolidBrush(color)) { g.FillPie(brush,4,4,8,8,-90,180); }

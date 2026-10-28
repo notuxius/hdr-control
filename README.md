@@ -16,7 +16,7 @@ Both menus open centered above the tray icon, shifting inward near screen edges 
 
 **Left-click** the icon for:
 
-- With one active display, a top **HDR: On / Off / Unavailable** status row. With multiple displays, a **Displays** submenu with each monitor's status replaces that row. With no displays detected, the top row shows **HDR: Unavailable**.
+- With one active display, a top **HDR: Enabled / Disabled / Unavailable** status row. With multiple displays, a **Displays** submenu with each monitor's status replaces that row. With no displays detected, the top row shows **HDR: Unavailable**.
 - **Enable HDR / Disable HDR**, matching the current state. The action affects all HDR-capable displays. When HDR is unavailable, the header reads **HDR: Unavailable** and the action is hidden. It reappears automatically when HDR becomes available.
 
 **Right-click** the icon for:
