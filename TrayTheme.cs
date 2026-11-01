@@ -44,9 +44,24 @@ namespace LocalHdrMenu {
         Padding surfacePadding = new Padding(6);
         Point popupAnchor;
         public NotifyIcon AnchorIcon { get; set; }
+        public bool ToggleOnAnchorClick { get; set; }
         public bool ShowActionIcons { get; set; }
         protected override Padding DefaultPadding { get { return surfacePadding; } }
         public void SetSurfacePadding(Padding value) { surfacePadding = value; Padding = value; }
+        public static bool ShouldDeferAnchorClose(ToolStripDropDownCloseReason reason, MouseButtons buttons, Point cursor, Rectangle anchor) {
+            return (reason == ToolStripDropDownCloseReason.AppClicked || reason == ToolStripDropDownCloseReason.AppFocusChange)
+                && (buttons & MouseButtons.Left) != 0 && anchor.Contains(cursor);
+        }
+        protected override void OnClosing(ToolStripDropDownClosingEventArgs e) {
+            base.OnClosing(e);
+            Rectangle anchor;
+            // Native menus dismiss on mouse-down, before NotifyIcon.MouseClick.
+            // Keep this one open for a left press on its own icon so the click
+            // handler can close it once, without immediately reopening it.
+            if (ToggleOnAnchorClick && TrayIconPosition.TryGetBounds(AnchorIcon, out anchor)
+                && ShouldDeferAnchorClose(e.CloseReason, Control.MouseButtons, Cursor.Position, anchor))
+                e.Cancel = true;
+        }
         public static Point CenteredLocation(Point anchor, Size size, Rectangle workArea, int gap) {
             int x = anchor.X - size.Width / 2;
             int y = anchor.Y - size.Height - gap;
