@@ -251,13 +251,16 @@ namespace LocalHdrMenu {
                     pen.StartCap = pen.EndCap = LineCap.Round;
                     pen.LineJoin = LineJoin.Round;
                     if (item.Name == "HdrSettings") {
-                        // Six teeth with a tooth centered at the top and bottom.
+                        // Eight defined teeth surrounding a centered sparkle.
                         // Keep the shared outline weight and 14-DIP artwork bounds.
-                        var gear = new PointF[24];
-                        for (int i = 0; i < gear.Length; i++) {
-                            double angle = i * Math.PI / 12 + Math.PI / 24;
-                            float radius = i % 4 == 1 || i % 4 == 2 ? 7f : 5.7f;
-                            gear[i] = new PointF(8 + radius * (float)Math.Cos(angle), 8 + radius * (float)Math.Sin(angle));
+                        var gear = new PointF[64];
+                        float[] angles = {0, .20f, .20f, .30f, .70f, .80f, .80f, 1};
+                        float[] radii = {5.6f, 5.6f, 6.5f, 7, 7, 6.5f, 5.6f, 5.6f};
+                        for (int tooth = 0; tooth < 8; tooth++) {
+                            for (int point = 0; point < 8; point++) {
+                                double angle = (tooth + angles[point]) * Math.PI / 4 - Math.PI / 8;
+                                gear[tooth * 8 + point] = new PointF(8 + radii[point] * (float)Math.Cos(angle), 8 + radii[point] * (float)Math.Sin(angle));
+                            }
                         }
                         path.AddPolygon(gear);
                         g.DrawPath(pen,path);
