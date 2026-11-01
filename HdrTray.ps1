@@ -172,8 +172,8 @@ function Initialize-HdrTray {
     [void]$script:hdrTray.ControlsMenu.Items.Add($script:hdrTray.Displays)
     [void]$script:hdrTray.ControlsMenu.Items.Add($script:hdrTray.CommandSeparator)
     [void]$script:hdrTray.ControlsMenu.Items.Add($script:hdrTray.Command)
-    [void]$script:hdrTray.Menu.Items.Add($script:hdrTray.HdrSettings)
     [void]$script:hdrTray.Menu.Items.Add($script:hdrTray.DisplaySettings)
+    [void]$script:hdrTray.Menu.Items.Add($script:hdrTray.HdrSettings)
     [void]$script:hdrTray.Menu.Items.Add((New-Object Windows.Forms.ToolStripSeparator))
     [void]$script:hdrTray.Menu.Items.Add($script:hdrTray.Exit)
     $script:hdrTray.Command.Name = 'HdrAction'

@@ -33,7 +33,7 @@ Initialize-HdrTray
 try {
     Assert ($null -ne $script:hdrTray.ShowMenuMethod) 'Native tray popup method unavailable'
     Assert ($null -eq $script:hdrTray.Icon.ContextMenuStrip) 'Automatic right-click opening must stay disabled'
-    Assert (($script:hdrTray.Menu.Items | Where-Object {$_ -is [Windows.Forms.ToolStripMenuItem] -and $_ -isnot [LocalHdrMenu.TrayStatusItem]} | ForEach-Object Text) -join '|' -eq 'HDR settings|Display settings|Exit') 'Right-click menu contains wrong items'
+    Assert (($script:hdrTray.Menu.Items | Where-Object {$_ -is [Windows.Forms.ToolStripMenuItem] -and $_ -isnot [LocalHdrMenu.TrayStatusItem]} | ForEach-Object Text) -join '|' -eq 'Display settings|HDR settings|Exit') 'Right-click menu contains wrong items'
     Assert ($script:hdrTray.Menu.Items.Count -eq 4 -and $script:hdrTray.Menu.Items[2] -is [Windows.Forms.ToolStripSeparator]) 'Right-click menu should contain only two settings shortcuts, a separator, and Exit'
     Assert ($script:hdrTray.Menu.ShowActionIcons) 'Right-click menu icons are missing'
     foreach ($popup in @($script:hdrTray.ControlsMenu,$script:hdrTray.Menu,$script:hdrTray.Displays.DropDown)) {
