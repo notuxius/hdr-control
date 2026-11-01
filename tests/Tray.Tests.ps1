@@ -39,7 +39,7 @@ try {
     foreach ($popup in @($script:hdrTray.ControlsMenu,$script:hdrTray.Menu,$script:hdrTray.Displays.DropDown)) {
         Assert ($popup.TransitionsDisabled) 'Windows should accept disabling popup transitions to avoid squeezed frames'
     }
-    Assert ($script:hdrTray.ControlsMenu.ToggleOnAnchorClick -and $script:hdrTray.Menu.ToggleOnAnchorClick) 'Both menus must defer dismissal for their tray click'
+    Assert ($script:hdrTray.PressTracker.IsListening) 'Early tray press tracking did not start'
     Assert ($script:hdrTray.ControlsMenu.Items.Contains($script:hdrTray.Displays)) 'Displays missing from left-click menu'
     Assert ($script:hdrTray.ControlsMenu.Items.Contains($script:hdrTray.Command)) 'HDR action missing from left-click menu'
     $mouseClick = [Windows.Forms.NotifyIcon].GetMethod('OnMouseClick',[Reflection.BindingFlags]'Instance,NonPublic')
@@ -200,17 +200,37 @@ try {
     & $script:realShowHdrControls
     Assert ($script:hdrTray.ControlsMenu.Visible -and -not $script:hdrTray.Menu.Visible) 'Left click should switch from settings to controls'
     $script:hdrTray.ControlsMenu.Close()
-    # Native dismissal precedes the tray event, sometimes after button release:
-    # dismissal over this icon, never Escape, menu actions, or outside clicks.
-    $bounds=[Drawing.Rectangle]::new(100,100,24,24)
-    $inside=[Drawing.Point]::new(112,112)
-    foreach($reason in @('AppClicked','AppFocusChange')) {
-        Assert ([LocalHdrMenu.TrayPopupMenu]::ShouldDeferAnchorClose($reason,$inside,$bounds)) 'Tray dismissal must wait for the toggle even after button release'
-        Assert (-not [LocalHdrMenu.TrayPopupMenu]::ShouldDeferAnchorClose($reason,[Drawing.Point]::new(50,50),$bounds)) 'Outside clicks must dismiss normally'
+    # Replay actual ordering: press -> native dismissal -> tray button-up.
+    # Old tests called the toggle while Visible was still true and missed this.
+    foreach ($sequence in @(@('L','R','R'),@('R','L','L'),@('L','L','L','L'),@('R','R','R','R'))) {
+        $script:hdrTray.ControlsMenu.Close()
+        $script:hdrTray.Menu.Close()
+        $expectedKind=''
+        foreach ($kind in $sequence) {
+            $script:hdrTray.PressTracker.RefreshAnchor()
+            Assert ([LocalHdrMenu.TrayIconPosition]::TryGetBounds($script:hdrTray.Icon,[ref]$iconBounds)) 'Tray bounds unavailable for input ordering test'
+            $press=[Drawing.Point]::new($iconBounds.Left+2,$iconBounds.Top+2)
+            $script:hdrTray.PressTracker.CapturePress($press)
+            foreach ($popup in @($script:hdrTray.ControlsMenu,$script:hdrTray.Menu)) {
+                if ($popup.Visible) { $popup.Close([Windows.Forms.ToolStripDropDownCloseReason]::AppFocusChange) }
+                Assert (-not $popup.Visible) 'Native dismissal must finish without being cancelled'
+            }
+            $expectedKind=if ($expectedKind -eq $kind) { '' } else { $kind }
+            if ($kind -eq 'L') { & $script:realShowHdrControls } else { & $script:realShowHdrSettings }
+            Assert ($script:hdrTray.ControlsMenu.Visible -eq ($expectedKind -eq 'L')) ('Wrong controls state after '+($sequence -join ' -> '))
+            Assert ($script:hdrTray.Menu.Visible -eq ($expectedKind -eq 'R')) ('Wrong settings state after '+($sequence -join ' -> '))
+        }
     }
-    foreach($reason in @('Keyboard','ItemClicked','CloseCalled')) {
-        Assert (-not [LocalHdrMenu.TrayPopupMenu]::ShouldDeferAnchorClose($reason,$inside,$bounds)) 'Explicit and keyboard closes must not be blocked'
-    }
+    $script:hdrTray.ControlsMenu.Close()
+    $script:hdrTray.Menu.Close()
+    # A new outside press must invalidate an abandoned icon gesture.
+    & $script:realShowHdrControls
+    $script:hdrTray.PressTracker.CapturePress($press)
+    $script:hdrTray.ControlsMenu.Close()
+    $script:hdrTray.PressTracker.CapturePress([Drawing.Point]::new(-32000,-32000))
+    & $script:realShowHdrControls
+    Assert ($script:hdrTray.ControlsMenu.Visible) 'Abandoned gesture swallowed a later click'
+    $script:hdrTray.ControlsMenu.Close()
     # Exercise the real launch validation without starting a process or changing HDR.
     function Start-Process {
         param($FilePath,$ArgumentList,$WindowStyle,[switch]$PassThru)

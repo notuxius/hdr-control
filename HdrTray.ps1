@@ -37,6 +37,7 @@ function Set-HdrTrayState($State) {
     # Explorer can miss an icon update during a display reconnect. Resend even
     # when the managed Icon property already holds the desired image.
     [LocalHdrMenu.TrayIconPosition]::Refresh($script:hdrTray.Icon)
+    if ($null -ne $script:hdrTray.PressTracker) { $script:hdrTray.PressTracker.RefreshAnchor() }
     $script:hdrTray.Command.Text = if ($State.Available) { $State.Command } else { 'Enable HDR' }
     $script:hdrTray.Command.Tag = $State.Action
     $script:hdrTray.Command.Enabled = $State.Available -and $null -eq $script:hdrTray.Pending
@@ -117,11 +118,12 @@ function Show-HdrSettingsMenu {
 }
 
 function Show-HdrTrayMenu($Menu, $OtherMenu) {
-    if ($Menu.Visible) {
-        $Menu.Close()
+    if ($script:hdrTray.PressTracker.ConsumeHide($Menu)) {
+        if ($Menu.Visible) { $Menu.Close() }
         return
     }
-    $OtherMenu.Close()
+    if ($OtherMenu.Visible) { $OtherMenu.Close() }
+    $script:hdrTray.PressTracker.RefreshAnchor()
     # Reuse NotifyIcon's native popup handling for focus, taskbar placement,
     # keyboard navigation, and dismissal when clicking elsewhere (.NET 4.x).
     $script:hdrTray.Icon.ContextMenuStrip = $Menu
@@ -164,8 +166,6 @@ function Initialize-HdrTray {
     $script:hdrTray.ControlsMenu.ShowImageMargin = $false
     $script:hdrTray.Menu.AnchorIcon = $script:hdrTray.Icon
     $script:hdrTray.ControlsMenu.AnchorIcon = $script:hdrTray.Icon
-    $script:hdrTray.ControlsMenu.ToggleOnAnchorClick = $true
-    $script:hdrTray.Menu.ToggleOnAnchorClick = $true
     $script:hdrTray.Menu.ShowActionIcons = $true
     $script:hdrTray.ControlsMenu.ShowActionIcons = $true
     [void]$script:hdrTray.ControlsMenu.Items.Add($script:hdrTray.Status)
@@ -213,10 +213,12 @@ function Initialize-HdrTray {
         if (-not (Test-Path -LiteralPath $installedScript)) { [Windows.Forms.Application]::ExitThread(); return }
         Update-HdrTray
     })
+    $script:hdrTray.PressTracker = [LocalHdrMenu.TrayPressTracker]::new($script:hdrTray.Icon,$script:hdrTray.ControlsMenu,$script:hdrTray.Menu)
 }
 
 function Close-HdrTray {
     $script:hdrTray.Timer.Stop()
+    if ($null -ne $script:hdrTray.PressTracker) { $script:hdrTray.PressTracker.Dispose() }
     $script:hdrTray.Icon.Visible = $false
     $script:hdrTray.Timer.Dispose()
     $script:hdrTray.Icon.Dispose()
