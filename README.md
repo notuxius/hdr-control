@@ -1,6 +1,6 @@
 # HDR Context Menu
 
-Current version: **1.0.1**.
+Current version: **1.0.2**.
 
 One desktop right-click action: **Enable HDR** when HDR is off and **Disable HDR** when it is on. With Nilesoft Shell, the action appears directly above **Display settings**.
 
@@ -24,7 +24,7 @@ Both menus open centered above the tray icon, shifting inward near screen edges 
 
 **Right-click** the icon to show or hide the settings menu. Clicking the other mouse button switches menus. The settings menu contains:
 
-- **HDR settings** shortcut with a solid gear icon.
+- **HDR settings** shortcut with an outlined sparkle and gear icon.
 - **Start with Windows**, a checked toggle for starting the helper at sign-in. The per-user preference survives updates; turning it off leaves the current helper running. The Start menu shortcut always works.
 - **Check for updates**, which checks published stable releases in the background. A newer version shows its version number and asks whether to download and install it. Choosing **Yes** downloads and validates the package, runs the installer, and restarts the tray without opening a browser. Windows may request administrator approval. Choosing **No** leaves the app unchanged. Failed installations attempt to restore the previous version; startup preferences are retained.
 - **About**, with the installed version and mouse controls.
