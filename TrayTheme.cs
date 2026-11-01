@@ -226,6 +226,9 @@ namespace LocalHdrMenu {
                 TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.SingleLine |
                 TextFormatFlags.NoPrefix | TextFormatFlags.NoPadding | TextFormatFlags.EndEllipsis);
         }
+        // One 16-DIP slot and stroke weight for every menu symbol.
+        const float GlyphSize = 16f;
+        const float GlyphStroke = 1.5f;
         static void DrawGlyph(Graphics g, ToolStripItem item, int left, Color color) {
             string status = item.Tag as string ?? item.Text;
             if (item.Name == "HdrAction") status = status == "On" ? "HDR: Enabled" : "HDR: Disabled";
@@ -240,73 +243,102 @@ namespace LocalHdrMenu {
             var saved = g.Save();
             try {
                 float scale = g.DpiX / 96f;
-                g.TranslateTransform(left, (item.Height - 16 * scale) / 2);
+                g.TranslateTransform(left, (float)Math.Round((item.Height - GlyphSize * scale) / 2f));
                 g.ScaleTransform(scale, scale);
                 g.SmoothingMode = SmoothingMode.AntiAlias;
-                using (var pen = new Pen(color, 1.5f)) {
+                using (var pen = new Pen(color, GlyphStroke))
+                using (var path = new GraphicsPath()) {
                     pen.StartCap = pen.EndCap = LineCap.Round;
                     pen.LineJoin = LineJoin.Round;
                     if (item.Name == "HdrSettings") {
-                        // Same filled sparkles and proportions as the 24px tray artwork.
-                        DrawSparkle(g,6,20f/3,16f/3,color);
-                        DrawSparkle(g,12,10f/3,2,Contrast || !item.Enabled ? color : Color.White);
-                        DrawSettingsGear(g, color, background, true);
+                        // Preserve the two-sparkle motif, with the same outline
+                        // weight as the other menu symbols instead of a solid fill.
+                        AddSparkle(path,5.75f,6,4.25f);
+                        g.DrawPath(pen,path);
+                        path.Reset();
+                        AddSparkle(path,12.25f,3.5f,1.5f);
+                        // The tiny accent is a single filled mark, like the info dot.
+                        using (var brush = new SolidBrush(color)) g.FillPath(brush,path);
+                        path.Reset();
+                        DrawSettingsGear(g, pen, background);
                     } else if (item.Name == "DisplaySettings" || item.Name == "Displays") {
-                        g.DrawRectangle(pen,1,2,14,10);
-                        g.DrawLine(pen,8,12,8,15); g.DrawLine(pen,5,15,11,15);
-                        if (item.Name == "DisplaySettings") DrawSettingsGear(g, color, background, true);
+                        path.AddRectangle(new RectangleF(1.5f,2.5f,13,9));
+                        AddStroke(path,8,11.5f,8,14.5f);
+                        AddStroke(path,5.5f,14.5f,10.5f,14.5f);
+                        g.DrawPath(pen,path);
+                        path.Reset();
+                        if (item.Name == "DisplaySettings") DrawSettingsGear(g, pen, background);
                     } else if (item.Name == "RefreshDisplays") {
-                        g.DrawArc(pen,2,2,12,12,190,145);
-                        g.DrawLines(pen,new PointF[] {new PointF(10,5.5f),new PointF(13.5f,5.5f),new PointF(13.5f,2)});
-                        g.DrawArc(pen,2,2,12,12,10,145);
-                        g.DrawLines(pen,new PointF[] {new PointF(6,10.5f),new PointF(2.5f,10.5f),new PointF(2.5f,14)});
+                        // Draw the arcs and heads together to avoid double-painted
+                        // joins, which made the arrows look heavier than other icons.
+                        path.AddArc(1.5f,1.5f,13,13,190,145);
+                        path.AddLine(13.89f,5.25f,10.6f,5.25f);
+                        AddStroke(path,13.89f,5.25f,13.89f,1.96f);
+                        path.StartFigure();
+                        path.AddArc(1.5f,1.5f,13,13,10,145);
+                        path.AddLine(2.11f,10.75f,5.4f,10.75f);
+                        AddStroke(path,2.11f,10.75f,2.11f,14.04f);
                     } else if (item.Name == "CheckUpdates") {
-                        g.DrawLine(pen,8,1,8,11);
-                        g.DrawLines(pen,new PointF[] {new PointF(4,7),new PointF(8,11),new PointF(12,7)});
-                        g.DrawLines(pen,new PointF[] {new PointF(2,11),new PointF(2,15),new PointF(14,15),new PointF(14,11)});
+                        AddStroke(path,8,1.5f,8,10.5f);
+                        path.StartFigure();
+                        path.AddLines(new PointF[] {new PointF(4.5f,7),new PointF(8,10.5f),new PointF(11.5f,7)});
+                        path.StartFigure();
+                        path.AddLines(new PointF[] {new PointF(1.5f,11),new PointF(1.5f,14.5f),new PointF(14.5f,14.5f),new PointF(14.5f,11)});
                     } else if (item.Name == "About") {
-                        g.DrawEllipse(pen,1,1,14,14); g.DrawLine(pen,8,7,8,12); g.DrawLine(pen,8,4,8,4.3f);
+                        path.AddEllipse(1.5f,1.5f,13,13);
+                        AddStroke(path,8,7.5f,8,11.5f);
+                        using (var brush = new SolidBrush(color)) g.FillEllipse(brush,7.25f,4,1.5f,1.5f);
                     } else if (item.Name == "Startup") {
-                        g.DrawEllipse(pen,1,1,14,14);
-                        if (((ToolStripMenuItem)item).Checked) g.DrawLines(pen,new PointF[] {new PointF(4,8),new PointF(7,11),new PointF(12,5)});
+                        path.AddEllipse(1.5f,1.5f,13,13);
+                        if (((ToolStripMenuItem)item).Checked) AddCheck(path);
                     } else if (item.Name == "ExitAction") {
-                        g.DrawArc(pen,2,2,12,12,-45,270); g.DrawLine(pen,8,0.5f,8,7);
+                        path.AddArc(1.5f,1.5f,13,13,-45,270);
+                        AddStroke(path,8,1.5f,8,7.5f);
                     } else if (item.Name == "HdrStatus" || item.Name == "HdrAction") {
-                        g.DrawEllipse(pen,1,1,14,14);
+                        path.AddEllipse(1.5f,1.5f,13,13);
                         if (status == "HDR: Unavailable") {
-                            g.DrawLine(pen,5,5,11,11); g.DrawLine(pen,11,5,5,11);
+                            AddStroke(path,5.5f,5.5f,10.5f,10.5f);
+                            AddStroke(path,10.5f,5.5f,5.5f,10.5f);
                         } else if (status == "HDR: Enabled") {
-                            g.DrawLines(pen,new PointF[] {new PointF(4,8),new PointF(7,11),new PointF(12,5)});
+                            AddCheck(path);
                         } else if (status == "HDR: Mixed") {
-                            using (var brush = new SolidBrush(color)) { g.FillPie(brush,4,4,8,8,-90,180); }
-                        } else { g.DrawLine(pen,4.5f,8,11.5f,8); }
+                            using (var brush = new SolidBrush(color)) g.FillPie(brush,4.5f,4.5f,7,7,-90,180);
+                        } else { AddStroke(path,5,8,11,8); }
                     }
+                    // A single path keeps shared endpoints and crossings equally weighted.
+                    if (path.PointCount > 0) g.DrawPath(pen,path);
                 }
             } finally { g.Restore(saved); }
         }
-        static void DrawSparkle(Graphics g, float x, float y, float radius, Color color) {
-            float inset = radius * .32f;
-            using (var brush = new SolidBrush(color)) {
-                g.FillPolygon(brush,new PointF[] {
-                    new PointF(x,y-radius),new PointF(x+inset,y-inset),
-                    new PointF(x+radius,y),new PointF(x+inset,y+inset),
-                    new PointF(x,y+radius),new PointF(x-inset,y+inset),
-                    new PointF(x-radius,y),new PointF(x-inset,y-inset)
-                });
-            }
+        static void AddStroke(GraphicsPath path, float x1, float y1, float x2, float y2) {
+            path.StartFigure();
+            path.AddLine(x1,y1,x2,y2);
         }
-        static void DrawSettingsGear(Graphics g, Color color, Color background, bool clearBehind) {
+        static void AddCheck(GraphicsPath path) {
+            path.StartFigure();
+            path.AddLines(new PointF[] {new PointF(4.5f,8),new PointF(7,10.5f),new PointF(11.5f,5.5f)});
+        }
+        static void AddSparkle(GraphicsPath path, float x, float y, float radius) {
+            float inset = radius * .32f;
+            path.StartFigure();
+            path.AddPolygon(new PointF[] {
+                new PointF(x,y-radius),new PointF(x+inset,y-inset),
+                new PointF(x+radius,y),new PointF(x+inset,y+inset),
+                new PointF(x,y+radius),new PointF(x-inset,y+inset),
+                new PointF(x-radius,y),new PointF(x-inset,y-inset)
+            });
+        }
+        static void DrawSettingsGear(Graphics g, Pen pen, Color background) {
             var gear = new PointF[24];
             for (int i = 0; i < gear.Length; i++) {
                 double angle = i * Math.PI / 12;
-                float radius = i % 4 == 1 || i % 4 == 2 ? 3.4f : 2.5f;
-                gear[i] = new PointF(12.2f + radius * (float)Math.Cos(angle), 12.2f + radius * (float)Math.Sin(angle));
+                float radius = i % 4 == 1 || i % 4 == 2 ? 2.8f : 2.05f;
+                gear[i] = new PointF(11.7f + radius * (float)Math.Cos(angle), 11.7f + radius * (float)Math.Sin(angle));
             }
-            using (var backdrop = new SolidBrush(background))
-            using (var fill = new SolidBrush(color)) {
-                if (clearBehind) g.FillEllipse(backdrop,7.9f,7.9f,8.6f,8.6f);
-                g.FillPolygon(fill,gear);
-                g.FillEllipse(backdrop,10.95f,10.95f,2.5f,2.5f);
+            using (var backdrop = new SolidBrush(background)) g.FillEllipse(backdrop,7.8f,7.8f,7.8f,7.8f);
+            using (var path = new GraphicsPath()) {
+                path.AddPolygon(gear);
+                g.DrawPath(pen,path);
             }
         }
         protected override void OnRenderSeparator(ToolStripSeparatorRenderEventArgs e) {
@@ -322,7 +354,9 @@ namespace LocalHdrMenu {
             int delta = Px(e.Graphics, 3);
             int tip = e.Direction == ArrowDirection.Left ? -delta : delta;
             e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
-            using (var pen = new Pen(color, Math.Max(1, e.Graphics.DpiX/96))) {
+            using (var pen = new Pen(color, GlyphStroke * e.Graphics.DpiX / 96f)) {
+                pen.StartCap = pen.EndCap = LineCap.Round;
+                pen.LineJoin = LineJoin.Round;
                 e.Graphics.DrawLines(pen, new Point[] { new Point(x,y-delta), new Point(x+tip,y), new Point(x,y+delta) });
             }
         }
