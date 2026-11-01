@@ -22,7 +22,7 @@ Both menus open centered above the tray icon, shifting inward near screen edges 
 
 **Right-click** the icon to show or hide the settings menu. Clicking the other mouse button switches menus. The settings menu contains:
 
-- **Display settings** and **HDR settings** shortcuts with solid gear icons.
+- **HDR settings** shortcut with a solid gear icon.
 - **Start with Windows**, a checked toggle for starting the helper at sign-in. The per-user preference survives updates; turning it off leaves the current helper running. The Start menu shortcut always works.
 - **Check for updates**, which compares the installed build with GitHub in the background and offers to open the repository if it differs. Updates can be downloaded and installed through Ketarin; this command does not install anything automatically.
 - **About**, with the installed version and mouse controls.
@@ -30,7 +30,7 @@ Both menus open centered above the tray icon, shifting inward near screen edges 
 
 **Middle-click** (press the mouse wheel) to toggle HDR directly, using the current Windows display state. Further clicks are ignored while a change is in progress. As with the menu command, this affects all active HDR-capable displays.
 
-Open **HDR Context Menu** from the Start menu (or run **Start-Tray.vbs**) to restart it without signing out. Only one helper runs per session. Transient display disconnects show an unavailable status and recover automatically. Status updates every two seconds and whenever the left-click menu opens. The HDR shortcut uses `ms-settings:display-hdr`; Display settings is also available for Windows versions that do not expose the dedicated HDR page.
+Open **HDR Context Menu** from the Start menu (or run **Start-Tray.vbs**) to restart it without signing out. Only one helper runs per session. Transient display disconnects show an unavailable status and recover automatically. Status updates every two seconds and whenever the left-click menu opens. The HDR shortcut uses `ms-settings:display-hdr`.
 
 ## Install
 
