@@ -19,7 +19,7 @@ Both menus open centered above the tray icon, shifting inward near screen edges 
 - With one active display, a top **HDR: Enabled / Disabled / Unavailable** status row. With multiple displays, a **Displays** submenu with each monitor's status replaces that row. With no displays detected, the top row shows **HDR: Unavailable**.
 - **Enable HDR / Disable HDR**, matching the current state. The action affects all HDR-capable displays. When HDR is unavailable, the header reads **HDR: Unavailable** and the action is hidden. It reappears automatically when HDR becomes available.
 
-**Right-click** the icon for:
+**Right-click** the icon to show or hide the settings menu. Clicking the other mouse button switches menus. The settings menu contains:
 
 - **HDR settings** and **Display settings** shortcuts with solid gear icons.
 - **Exit**, which closes the helper until the next sign-in. Automatic desktop label refresh also stops until the helper is restarted.
