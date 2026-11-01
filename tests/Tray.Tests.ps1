@@ -24,6 +24,11 @@ function Start-HdrChange([string]$NextAction) { $script:requestedAction = $NextA
 function Open-HdrSettings([string]$Uri) { $script:requestedUri = $Uri }
 function Show-HdrControls { $script:controlsOpened++ }
 function Show-HdrSettingsMenu { $script:settingsOpened++ }
+function Get-HdrStartupEnabled { return $script:testStartup }
+function Set-HdrStartupEnabled([bool]$Enabled) { $script:testStartup = $Enabled }
+function Get-HdrInstalledVersion { return ('a' * 40) }
+function Show-HdrMessage([string]$Text, $Buttons = 'OK') { $script:lastMessage = $Text; return [Windows.Forms.DialogResult]::OK }
+$script:testStartup = $true
 function Assert($Condition, [string]$Message) { if (-not $Condition) { throw $Message } }
 function Display([string]$Name, [bool]$Supported, [bool]$Enabled) {
     [pscustomobject]@{Name=$Name;HdrSupported=$Supported;HdrEnabled=$Enabled}
@@ -33,8 +38,24 @@ Initialize-HdrTray
 try {
     Assert ($null -ne $script:hdrTray.ShowMenuMethod) 'Native tray popup method unavailable'
     Assert ($null -eq $script:hdrTray.Icon.ContextMenuStrip) 'Automatic right-click opening must stay disabled'
-    Assert (($script:hdrTray.Menu.Items | Where-Object {$_ -is [Windows.Forms.ToolStripMenuItem] -and $_ -isnot [LocalHdrMenu.TrayStatusItem]} | ForEach-Object Text) -join '|' -eq 'Display settings|HDR settings|Exit') 'Right-click menu contains wrong items'
-    Assert ($script:hdrTray.Menu.Items.Count -eq 4 -and $script:hdrTray.Menu.Items[2] -is [Windows.Forms.ToolStripSeparator]) 'Right-click menu should contain only two settings shortcuts, a separator, and Exit'
+    Assert (($script:hdrTray.Menu.Items | Where-Object {$_ -is [Windows.Forms.ToolStripMenuItem] -and $_ -isnot [LocalHdrMenu.TrayStatusItem]} | ForEach-Object Text) -join '|' -eq 'Display settings|HDR settings|Start with Windows|Check for updates|About|Exit') 'Right-click menu contains wrong items'
+    Assert ($script:hdrTray.Menu.Items.Count -eq 8 -and $script:hdrTray.Menu.Items[2] -is [Windows.Forms.ToolStripSeparator] -and $script:hdrTray.Menu.Items[6] -is [Windows.Forms.ToolStripSeparator]) 'Right-click menu groups are incorrect'
+    Assert ($script:hdrTray.Startup.Checked) 'Startup should reflect the stored preference'
+    $script:hdrTray.Startup.PerformClick()
+    Assert (-not $script:testStartup -and -not $script:hdrTray.Startup.Checked) 'Startup toggle should save disabled without exiting the tray'
+    $script:hdrTray.Startup.PerformClick()
+    Assert ($script:testStartup -and $script:hdrTray.Startup.Checked) 'Startup toggle should save enabled'
+    $script:hdrTray.About.PerformClick()
+    Assert ($script:lastMessage -match 'aaaaaaa' -and $script:lastMessage -match 'Middle click') 'About should show version and controls'
+    foreach ($case in @('current','different','offline','invalid')) {
+        $result = switch ($case) { 'current' { '{"sha":"' + ('a' * 40) + '"}' } 'different' { '{"sha":"' + ('b' * 40) + '"}' } default { '{}' } }
+        $script:hdrTray.UpdateCheck = [pscustomobject]@{Finished=$true;Result=$result;Error=$(if ($case -eq 'offline') {'offline'} else {$null})}
+        $script:hdrTray.CheckUpdates.Enabled = $false
+        Complete-HdrUpdateCheck
+        Assert ($null -eq $script:hdrTray.UpdateCheck -and $script:hdrTray.CheckUpdates.Enabled) 'Update check must restore the menu item'
+        $expected = switch ($case) { 'current' {'latest version'} 'different' {'different version'} default {'Could not check'} }
+        Assert ($script:lastMessage -match $expected) ('Wrong update result: ' + $case)
+    }
     Assert ($script:hdrTray.Menu.ShowActionIcons) 'Right-click menu icons are missing'
     foreach ($popup in @($script:hdrTray.ControlsMenu,$script:hdrTray.Menu,$script:hdrTray.Displays.DropDown)) {
         Assert ($popup.TransitionsDisabled) 'Windows should accept disabling popup transitions to avoid squeezed frames'
@@ -42,6 +63,7 @@ try {
     Assert ($script:hdrTray.PressTracker.IsListening) 'Early tray press tracking did not start'
     Assert ($script:hdrTray.ControlsMenu.Items.Contains($script:hdrTray.Displays)) 'Displays missing from left-click menu'
     Assert ($script:hdrTray.ControlsMenu.Items.Contains($script:hdrTray.Command)) 'HDR action missing from left-click menu'
+    Assert ($script:hdrTray.ControlsMenu.Items.Contains($script:hdrTray.Refresh)) 'Refresh displays missing from left-click menu'
     $mouseClick = [Windows.Forms.NotifyIcon].GetMethod('OnMouseClick',[Reflection.BindingFlags]'Instance,NonPublic')
     $mouseUp = [Windows.Forms.NotifyIcon].GetMethod('OnMouseUp',[Reflection.BindingFlags]'Instance,NonPublic')
     $script:controlsOpened=0
@@ -121,6 +143,10 @@ try {
     $script:hdrTray.DisplaySettings.PerformClick()
     Assert ($script:requestedUri -eq 'ms-settings:display') 'Display settings link incorrect'
     Assert ($script:syncCount -eq 6) 'Desktop label synchronization stopped'
+    [LocalHdrMenu.DisplayApi]::Displays = @((Display 'Reconnected' $false $false))
+    $script:hdrTray.Refresh.PerformClick()
+    Assert ($script:hdrTray.Status.Text -eq 'HDR: Unavailable' -and $script:hdrTray.Refresh.Available) 'Refresh must reread displays and remain available without HDR'
+    Assert ($script:syncCount -eq 7) 'Manual refresh did not synchronize the desktop menu'
     # Reconnect sequence: capable/disabled -> two unavailable displays ->
     # capable again. Keep the submenu open while its rows are replaced.
     [LocalHdrMenu.DisplayApi]::Displays = @((Display 'Laptop' $false $false),(Display 'External' $true $false))

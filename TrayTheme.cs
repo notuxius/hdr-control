@@ -6,6 +6,26 @@ using System.Runtime.InteropServices;
 using System.Windows.Forms;
 
 namespace LocalHdrMenu {
+    public sealed class UpdateCheck {
+        public string Result { get; private set; }
+        public string Error { get; private set; }
+        public volatile bool Finished;
+        public void Start() {
+            System.Threading.ThreadPool.QueueUserWorkItem(delegate {
+                try {
+                    System.Net.ServicePointManager.SecurityProtocol |= System.Net.SecurityProtocolType.Tls12;
+                    var request = (System.Net.HttpWebRequest)System.Net.WebRequest.Create("https://api.github.com/repos/notuxius/hdr-context-menu/commits/main");
+                    request.UserAgent = "HdrContextMenu";
+                    request.Accept = "application/vnd.github+json";
+                    request.Timeout = 10000;
+                    request.ReadWriteTimeout = 10000;
+                    using (var response = request.GetResponse())
+                    using (var reader = new System.IO.StreamReader(response.GetResponseStream())) Result = reader.ReadToEnd();
+                } catch (Exception ex) { Error = ex.Message; }
+                finally { Finished = true; }
+            });
+        }
+    }
     public static class TrayIconPosition {
         // https://learn.microsoft.com/windows/win32/api/shellapi/nf-shellapi-shell_notifyicongetrect
         // Windows PowerShell uses .NET Framework's HWND + numeric NotifyIcon ID.
@@ -203,6 +223,7 @@ namespace LocalHdrMenu {
         static void DrawGlyph(Graphics g, ToolStripItem item, int left, Color color) {
             string status = item.Tag as string ?? item.Text;
             if (item.Name == "HdrAction") status = status == "On" ? "HDR: Enabled" : "HDR: Disabled";
+            if (!Contrast && item.Name == "Startup" && ((ToolStripMenuItem)item).Checked) color = Color.FromArgb(68,195,149);
             bool highlighted = item.Enabled && item.Selected;
             Color background = Contrast ? (highlighted ? SystemColors.Highlight : SystemColors.Menu) : (highlighted ? Hover : Surface);
             if (!Contrast && (item.Name == "HdrStatus" || (item.Name == "HdrAction" && item.Enabled))) {
@@ -228,6 +249,18 @@ namespace LocalHdrMenu {
                         g.DrawRectangle(pen,1,2,14,10);
                         g.DrawLine(pen,8,12,8,15); g.DrawLine(pen,5,15,11,15);
                         if (item.Name == "DisplaySettings") DrawSettingsGear(g, color, background, true);
+                    } else if (item.Name == "RefreshDisplays") {
+                        g.DrawArc(pen,2,2,12,12,35,285);
+                        g.DrawLines(pen,new PointF[] {new PointF(9,1),new PointF(13,2),new PointF(12,6)});
+                    } else if (item.Name == "CheckUpdates") {
+                        g.DrawLine(pen,8,1,8,11);
+                        g.DrawLines(pen,new PointF[] {new PointF(4,7),new PointF(8,11),new PointF(12,7)});
+                        g.DrawLines(pen,new PointF[] {new PointF(2,11),new PointF(2,15),new PointF(14,15),new PointF(14,11)});
+                    } else if (item.Name == "About") {
+                        g.DrawEllipse(pen,1,1,14,14); g.DrawLine(pen,8,7,8,12); g.DrawLine(pen,8,4,8,4.3f);
+                    } else if (item.Name == "Startup") {
+                        g.DrawEllipse(pen,1,1,14,14);
+                        if (((ToolStripMenuItem)item).Checked) g.DrawLines(pen,new PointF[] {new PointF(4,8),new PointF(7,11),new PointF(12,5)});
                     } else if (item.Name == "ExitAction") {
                         g.DrawArc(pen,2,2,12,12,-45,270); g.DrawLine(pen,8,0.5f,8,7);
                     } else if (item.Name == "HdrStatus" || item.Name == "HdrAction") {
