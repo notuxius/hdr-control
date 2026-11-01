@@ -3,6 +3,9 @@
 # Reviewed: 2026-11-01. Scope: native PC HDR only; not Windows Auto HDR, RTX HDR, or mod-only HDR.
 # Initial HDR-Auto snapshot: 2026-11-01. Original attribution and MIT notice retained below.
 # Evidence: publisher HDR declarations and direct measurements of built-in PC HDR modes.
+# Store-independent: match running game EXEs, including GOG/offline/direct launches.
+# Store links below are evidence only. No Steam, Epic, GOG Galaxy, or other client is required by this helper.
+# Different storefront EXE names need separate exact entries; add verified aliases or a custom entry.
 # Steam launch metadata is publisher-authored data retrieved through the SteamCMD API mirror.
 # Existing executable names are inherited unless an Executable source is given; storefronts may differ.
 # This is a conservative list, not an exhaustive HDR catalog or a claim of hands-on testing.
