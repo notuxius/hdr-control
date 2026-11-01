@@ -9,18 +9,24 @@ namespace LocalHdrMenu {
     public sealed class UpdateCheck {
         public string Result { get; private set; }
         public string Error { get; private set; }
+        public bool NoRelease { get; private set; }
         public volatile bool Finished;
         public void Start() {
             System.Threading.ThreadPool.QueueUserWorkItem(delegate {
                 try {
                     System.Net.ServicePointManager.SecurityProtocol |= System.Net.SecurityProtocolType.Tls12;
-                    var request = (System.Net.HttpWebRequest)System.Net.WebRequest.Create("https://api.github.com/repos/notuxius/hdr-context-menu/commits/main");
+                    var request = (System.Net.HttpWebRequest)System.Net.WebRequest.Create("https://api.github.com/repos/notuxius/hdr-context-menu/releases/latest");
                     request.UserAgent = "HdrContextMenu";
                     request.Accept = "application/vnd.github+json";
                     request.Timeout = 10000;
                     request.ReadWriteTimeout = 10000;
                     using (var response = request.GetResponse())
                     using (var reader = new System.IO.StreamReader(response.GetResponseStream())) Result = reader.ReadToEnd();
+                } catch (System.Net.WebException ex) {
+                    using (var response = ex.Response as System.Net.HttpWebResponse) {
+                        if (response != null && response.StatusCode == System.Net.HttpStatusCode.NotFound) NoRelease = true;
+                        else Error = ex.Message;
+                    }
                 } catch (Exception ex) { Error = ex.Message; }
                 finally { Finished = true; }
             });

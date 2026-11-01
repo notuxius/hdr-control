@@ -1,5 +1,7 @@
 # HDR Context Menu
 
+Current version: **1.0.0**.
+
 One desktop right-click action: **Enable HDR** when HDR is off and **Disable HDR** when it is on. With Nilesoft Shell, the action appears directly above **Display settings**.
 
 The desktop entry matches the tray menu's action icons: a green check for **Enable HDR**, a yellow minus for **Disable HDR**, and a red X for **HDR: Unavailable**. Nilesoft shows the unavailable entry when no active display supports HDR. The native Windows entry stays hidden in that state.
@@ -18,13 +20,13 @@ Both menus open centered above the tray icon, shifting inward near screen edges 
 
 - With one active display, its name appears above the **HDR: Enabled / Disabled / Unavailable** status row. Both rows are informational and do not highlight on hover. With multiple displays, a **Displays** submenu with each monitor's status replaces those rows. With no displays detected, the top row shows **HDR: Unavailable**.
 - **Enable HDR / Disable HDR**, matching the current state. The action affects all HDR-capable displays. When HDR is unavailable, the header reads **HDR: Unavailable** and the action is hidden. It reappears automatically when HDR becomes available.
-- **Refresh displays** immediately rereads connected displays and updates their status, the tray icon, and the desktop menu. It remains available when HDR is unavailable.
+- **Refresh displays**, directly below the status (or Displays submenu), immediately rereads connected displays and updates their status, the tray icon, and the desktop menu. It remains available when HDR is unavailable.
 
 **Right-click** the icon to show or hide the settings menu. Clicking the other mouse button switches menus. The settings menu contains:
 
 - **HDR settings** shortcut with a solid gear icon.
 - **Start with Windows**, a checked toggle for starting the helper at sign-in. The per-user preference survives updates; turning it off leaves the current helper running. The Start menu shortcut always works.
-- **Check for updates**, which compares the installed build with GitHub in the background and offers to open the repository if it differs. Updates can be downloaded and installed through Ketarin; this command does not install anything automatically.
+- **Check for updates**, which checks published stable releases in the background. A newer version shows its version number and asks whether to download and install it. Choosing **Yes** downloads and validates the package, runs the installer, and restarts the tray without opening a browser. Windows may request administrator approval. Choosing **No** leaves the app unchanged. Failed installations attempt to restore the previous version; startup preferences are retained.
 - **About**, with the installed version and mouse controls.
 - **Exit**, which closes the helper. Automatic desktop label refresh also stops until the helper is restarted (at the next sign-in if startup is enabled).
 
@@ -72,3 +74,11 @@ powershell.exe -NoProfile -File "C:\ProgramData\HdrSdrMenu\HdrSdrMenu.ps1" -Acti
 ```
 
 The public source contains no machine-specific user paths, credentials, or display IDs.
+
+## Versioned releases
+
+`VERSION` is the installed and displayed MAJOR.MINOR.PATCH version. Increment the patch for fixes, the minor for backward-compatible features, and the major for incompatible changes. Update checks compare version numbers numerically, never commit IDs, and never offer equal or older versions. Preview releases are excluded.
+
+To publish an update, commit the new `VERSION` and changes, push an annotated `vMAJOR.MINOR.PATCH` tag, and publish a non-draft, non-prerelease GitHub release for that tag. The tag must match `VERSION`; do not move published tags. The updater downloads the repository archive for that exact tag and checks its version and required files before installation. Repository commits without a published release are not offered as app updates.
+
+Run `powershell.exe -NoProfile -STA -File tests\Update.Tests.ps1` to verify version ordering, archive validation, installation, cancellation, and recovery using isolated files and mocked installers.

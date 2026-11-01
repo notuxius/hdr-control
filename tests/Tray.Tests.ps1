@@ -7,6 +7,7 @@ $installedScript = Join-Path $repo 'HdrSdrMenu.ps1'
 $script:realStartHdrChange = ${function:Start-HdrChange}
 $script:realShowHdrControls = ${function:Show-HdrControls}
 $script:realShowHdrSettings = ${function:Show-HdrSettingsMenu}
+$script:realStartAppUpdate = ${function:Start-HdrAppUpdate}
 Add-Type @'
 namespace LocalHdrMenu {
     public static class DisplayApi {
@@ -26,8 +27,10 @@ function Show-HdrControls { $script:controlsOpened++ }
 function Show-HdrSettingsMenu { $script:settingsOpened++ }
 function Get-HdrStartupEnabled { return $script:testStartup }
 function Set-HdrStartupEnabled([bool]$Enabled) { $script:testStartup = $Enabled }
-function Get-HdrInstalledVersion { return ('a' * 40) }
-function Show-HdrMessage([string]$Text, $Buttons = 'OK') { $script:lastMessage = $Text; return [Windows.Forms.DialogResult]::OK }
+function Get-HdrInstalledVersion { return '1.0.0' }
+function Start-HdrAppUpdate([string]$Version) { $script:offeredVersion = $Version }
+function Show-HdrMessage([string]$Text, $Buttons = 'OK') { $script:lastMessage = $Text; return $script:messageResponse }
+$script:messageResponse = [Windows.Forms.DialogResult]::No
 $script:testStartup = $true
 function Assert($Condition, [string]$Message) { if (-not $Condition) { throw $Message } }
 function Display([string]$Name, [bool]$Supported, [bool]$Enabled) {
@@ -46,16 +49,25 @@ try {
     $script:hdrTray.Startup.PerformClick()
     Assert ($script:testStartup -and $script:hdrTray.Startup.Checked) 'Startup toggle should save enabled'
     $script:hdrTray.About.PerformClick()
-    Assert ($script:lastMessage -match 'aaaaaaa' -and $script:lastMessage -match 'Middle click') 'About should show version and controls'
-    foreach ($case in @('current','different','offline','invalid')) {
-        $result = switch ($case) { 'current' { '{"sha":"' + ('a' * 40) + '"}' } 'different' { '{"sha":"' + ('b' * 40) + '"}' } default { '{}' } }
-        $script:hdrTray.UpdateCheck = [pscustomobject]@{Finished=$true;Result=$result;Error=$(if ($case -eq 'offline') {'offline'} else {$null})}
+    Assert ($script:lastMessage -match '1.0.0' -and $script:lastMessage -match 'Middle click') 'About should show version and controls'
+    foreach ($case in @('current','newer','older','none','preview','offline','invalid')) {
+        $tag = switch ($case) { 'current' {'v1.0.0'} 'newer' {'v1.10.0'} 'older' {'v0.9.0'} 'preview' {'v1.1.0-beta'} default {'invalid'} }
+        $result = @{tag_name=$tag;draft=$false;prerelease=($case -eq 'preview')} | ConvertTo-Json
+        $script:hdrTray.UpdateCheck = [pscustomobject]@{Finished=$true;Result=$result;NoRelease=($case -eq 'none');Error=$(if ($case -eq 'offline') {'offline'} else {$null})}
         $script:hdrTray.CheckUpdates.Enabled = $false
         Complete-HdrUpdateCheck
         Assert ($null -eq $script:hdrTray.UpdateCheck -and $script:hdrTray.CheckUpdates.Enabled) 'Update check must restore the menu item'
-        $expected = switch ($case) { 'current' {'latest version'} 'different' {'different version'} default {'Could not check'} }
+        $expected = switch ($case) { 'current' {'latest version'} 'older' {'latest version'} 'newer' {'newer version is available: 1.10.0'} 'none' {'No newer version'} default {'Could not check'} }
         Assert ($script:lastMessage -match $expected) ('Wrong update result: ' + $case)
+        Assert ($script:lastMessage -notmatch 'Ketarin|Open GitHub') 'Update messages must stay inside the app'
+        Assert ($null -eq $script:offeredVersion) 'Declining an update must not start installation'
     }
+    $script:messageResponse = [Windows.Forms.DialogResult]::Yes
+    $script:hdrTray.UpdateCheck = [pscustomobject]@{Finished=$true;Result='{"tag_name":"v1.1.0","draft":false,"prerelease":false}';NoRelease=$false;Error=$null}
+    Complete-HdrUpdateCheck
+    Assert ($script:offeredVersion -eq '1.1.0') 'Accepting a newer release must launch the in-app installer'
+    Assert ($null -eq $script:requestedUri) 'Updating must not open a browser'
+    $script:messageResponse = [Windows.Forms.DialogResult]::No
     Assert ($script:hdrTray.Menu.ShowActionIcons) 'Right-click menu icons are missing'
     foreach ($popup in @($script:hdrTray.ControlsMenu,$script:hdrTray.Menu,$script:hdrTray.Displays.DropDown)) {
         Assert ($popup.TransitionsDisabled) 'Windows should accept disabling popup transitions to avoid squeezed frames'
@@ -90,6 +102,8 @@ try {
     Update-HdrTray
     Assert ($script:hdrTray.Status.Text -eq 'HDR: Disabled') 'SDR status incorrect'
     Assert ($script:hdrTray.Status.Available -and -not $script:hdrTray.Displays.Available) 'One display should show its status without a submenu'
+    $visible = @($script:hdrTray.ControlsMenu.Items | Where-Object Available)
+    Assert ($visible[2] -eq $script:hdrTray.Refresh -and $visible[1] -eq $script:hdrTray.Status) 'Refresh must appear directly below HDR status'
     Assert ($script:hdrTray.DisplayName.Available -and $script:hdrTray.DisplayName.Text -eq 'Primary') 'Single display name is missing'
     Assert ($script:hdrTray.ControlsMenu.Items.IndexOf($script:hdrTray.DisplayName) -lt $script:hdrTray.ControlsMenu.Items.IndexOf($script:hdrTray.Status)) 'Display name must appear above HDR status'
     Assert (-not $script:hdrTray.DisplayName.Enabled -and -not $script:hdrTray.DisplayName.CanSelect) 'Display name must not highlight or act as a command'
@@ -276,5 +290,17 @@ try {
         & $script:realStartHdrChange 'Toggle'
         Assert ($script:launches -eq 1) 'Repeated middle clicks must not start overlapping changes'
     } finally { $script:hdrTray.Pending=$null }
+    $script:launches=0
+    try {
+        & $script:realStartAppUpdate '1.1.0'
+        Assert ($script:launchArguments -match 'Update-HdrApp.ps1" -Version 1.1.0$') 'Accepted update must launch the installed updater directly'
+        Assert (-not $script:hdrTray.CheckUpdates.Enabled -and $script:hdrTray.CheckUpdates.Text -eq 'Updating...') 'Update progress is missing'
+        & $script:realStartAppUpdate '1.1.0'
+        Assert ($script:launches -eq 1) 'Repeated updates must not launch overlapping installers'
+        $script:hdrTray.UpdateProcess.HasExited=$true
+        $script:hdrTray.UpdateProcess | Add-Member ScriptMethod Dispose {}
+        Complete-HdrAppUpdate
+        Assert ($null -eq $script:hdrTray.UpdateProcess -and $script:hdrTray.CheckUpdates.Enabled) 'Exited updater must allow retry after cancellation or failure'
+    } finally { $script:hdrTray.UpdateProcess=$null }
     'PASS: click routing, native popup placement and screen edges, toggle concurrency, menu contents, state updates, recovery, and settings links.'
 } finally { Close-HdrTray }

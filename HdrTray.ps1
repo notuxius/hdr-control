@@ -1,5 +1,6 @@
 # Loaded by the existing Watch action after the display API is initialized.
 Add-Type -AssemblyName System.Windows.Forms, System.Drawing
+. (Join-Path $PSScriptRoot 'Update-HdrApp.ps1') -FunctionsOnly
 if (-not ('LocalHdrMenu.TrayMenuTheme' -as [type])) {
     Add-Type -Path (Join-Path $PSScriptRoot 'TrayTheme.cs') -ReferencedAssemblies System.Windows.Forms,System.Drawing
 }
@@ -41,7 +42,7 @@ function Set-HdrTrayState($State) {
     if ($null -ne $script:hdrTray.PressTracker) { $script:hdrTray.PressTracker.RefreshAnchor() }
     $script:hdrTray.Command.Text = if ($State.Available) { $State.Command } else { 'Enable HDR' }
     $script:hdrTray.Command.Tag = $State.Action
-    $script:hdrTray.Command.Enabled = $State.Available -and $null -eq $script:hdrTray.Pending
+    $script:hdrTray.Command.Enabled = $State.Available -and $null -eq $script:hdrTray.Pending -and $null -eq $script:hdrTray.UpdateProcess
     $script:hdrTray.ControlsMenu.SuspendLayout()
     $multipleDisplays = $State.Details.Count -gt 1
     $script:hdrTray.DisplayName.Text = [string]$State.DisplayName
@@ -113,10 +114,11 @@ function Switch-HdrStartup {
 }
 
 function Get-HdrInstalledVersion {
-    $path = Join-Path $PSScriptRoot 'package.commit'
+    $path = Join-Path $PSScriptRoot 'VERSION'
     if (Test-Path -LiteralPath $path) {
         $value = [IO.File]::ReadAllText($path).Trim()
-        if ($value -match '^[a-f0-9]{40}$') { return $value }
+        [void](ConvertTo-HdrVersion $value)
+        return $value
     }
     return $null
 }
@@ -127,12 +129,12 @@ function Show-HdrMessage([string]$Text, [Windows.Forms.MessageBoxButtons]$Button
 
 function Show-HdrAbout {
     $version = Get-HdrInstalledVersion
-    $label = if ($version) { $version.Substring(0,7) } else { 'Local build' }
+    $label = if ($version) { $version } else { 'Unknown' }
     [void](Show-HdrMessage ("HDR Context Menu`nVersion: $label`n`nLeft click: HDR controls`nRight click: Settings and app options`nMiddle click: Toggle HDR`n`nBy notuxius`ngithub.com/notuxius/hdr-context-menu"))
 }
 
 function Start-HdrUpdateCheck {
-    if ($null -ne $script:hdrTray.UpdateCheck) { return }
+    if ($null -ne $script:hdrTray.UpdateCheck -or $null -ne $script:hdrTray.UpdateProcess) { return }
     $script:hdrTray.CheckUpdates.Enabled = $false
     $script:hdrTray.CheckUpdates.Text = 'Checking for updates...'
     $script:hdrTray.UpdateCheck = [LocalHdrMenu.UpdateCheck]::new()
@@ -147,22 +149,49 @@ function Complete-HdrUpdateCheck {
     $script:hdrTray.CheckUpdates.Text = 'Check for updates'
     try {
         if ($check.Error) { throw $check.Error }
-        $latest = ($check.Result | ConvertFrom-Json -ErrorAction Stop).sha
-        if ($latest -notmatch '^[a-f0-9]{40}$') { throw 'Invalid version response' }
         $installed = Get-HdrInstalledVersion
-        if ($installed -eq $latest) {
-            [void](Show-HdrMessage 'You have the latest version.')
-        } else {
-            $message = if ($installed) { 'A different version is available on GitHub.' } else { 'The installed version could not be identified.' }
-            if ((Show-HdrMessage ($message + "`n`nOpen GitHub to review it? You can update through Ketarin.") 'YesNo') -eq [Windows.Forms.DialogResult]::Yes) {
-                Open-HdrSettings 'https://github.com/notuxius/hdr-context-menu'
-            }
+        $currentVersion = ConvertTo-HdrVersion $installed
+        if ($check.NoRelease) {
+            [void](Show-HdrMessage ("No newer version is available.`nCurrent version: $installed"))
+            return
+        }
+        $release = $check.Result | ConvertFrom-Json -ErrorAction Stop
+        if ($release.draft -ne $false -or $release.prerelease -ne $false -or $release.tag_name -cnotmatch '^v(.+)$') { throw 'Invalid release response' }
+        $latest = $Matches[1]
+        $latestVersion = ConvertTo-HdrVersion $latest
+        if ($latestVersion -le $currentVersion) {
+            [void](Show-HdrMessage ("You have the latest version.`nCurrent version: $installed"))
+        } elseif ((Show-HdrMessage ("A newer version is available: $latest`nCurrent version: $installed`n`nDownload and install it now?") 'YesNo') -eq [Windows.Forms.DialogResult]::Yes) {
+            Start-HdrAppUpdate $latest
         }
     } catch { [void](Show-HdrMessage 'Could not check for updates. Check your internet connection and try again later.') }
 }
 
+function Start-HdrAppUpdate([string]$Version) {
+    if ($null -ne $script:hdrTray.UpdateProcess) { return }
+    if ($null -ne $script:hdrTray.Pending) { [void](Show-HdrMessage 'Please wait for the HDR change to finish, then check for updates again.'); return }
+    try {
+        [void](ConvertTo-HdrVersion $Version)
+        $script:hdrTray.UpdateProcess = Start-Process -FilePath (Join-Path $PSHOME 'powershell.exe') -ArgumentList (
+            '-NoProfile -NonInteractive -STA -WindowStyle Hidden -ExecutionPolicy Bypass -File "{0}" -Version {1}' -f (Join-Path $PSScriptRoot 'Update-HdrApp.ps1'),$Version
+        ) -WindowStyle Hidden -PassThru -ErrorAction Stop
+        $script:hdrTray.CheckUpdates.Text = 'Updating...'
+        $script:hdrTray.CheckUpdates.Enabled = $false
+        $script:hdrTray.Command.Enabled = $false
+    } catch { [void](Show-HdrMessage 'The update could not be started. Please try again.') }
+}
+
+function Complete-HdrAppUpdate {
+    if ($null -ne $script:hdrTray.UpdateProcess -and $script:hdrTray.UpdateProcess.HasExited) {
+        $script:hdrTray.UpdateProcess.Dispose()
+        $script:hdrTray.UpdateProcess = $null
+        $script:hdrTray.CheckUpdates.Text = 'Check for updates'
+        $script:hdrTray.CheckUpdates.Enabled = $true
+    }
+}
+
 function Start-HdrChange([string]$NextAction) {
-    if ($null -ne $script:hdrTray.Pending -or $NextAction -notin @('On','Off','Toggle')) { return }
+    if ($null -ne $script:hdrTray.Pending -or $null -ne $script:hdrTray.UpdateProcess -or $NextAction -notin @('On','Off','Toggle')) { return }
     try {
         # Keep the menu responsive while Windows changes display mode. Use the
         # explicit action offered by the menu. Middle-click uses Toggle, which
@@ -222,6 +251,7 @@ function Initialize-HdrTray {
         CheckUpdates = New-Object Windows.Forms.ToolStripMenuItem('Check for updates')
         About = New-Object Windows.Forms.ToolStripMenuItem('About')
         UpdateCheck = $null
+        UpdateProcess = $null
         Exit = New-Object Windows.Forms.ToolStripMenuItem('Exit')
         Timer = New-Object Windows.Forms.Timer
         EnabledIcon = [Drawing.Icon]::new((Join-Path $PSScriptRoot 'HdrEnabled.ico'), [Windows.Forms.SystemInformation]::SmallIconSize)
@@ -245,10 +275,9 @@ function Initialize-HdrTray {
     [void]$script:hdrTray.ControlsMenu.Items.Add($script:hdrTray.DisplayName)
     [void]$script:hdrTray.ControlsMenu.Items.Add($script:hdrTray.Status)
     [void]$script:hdrTray.ControlsMenu.Items.Add($script:hdrTray.Displays)
+    [void]$script:hdrTray.ControlsMenu.Items.Add($script:hdrTray.Refresh)
     [void]$script:hdrTray.ControlsMenu.Items.Add($script:hdrTray.CommandSeparator)
     [void]$script:hdrTray.ControlsMenu.Items.Add($script:hdrTray.Command)
-    [void]$script:hdrTray.ControlsMenu.Items.Add((New-Object Windows.Forms.ToolStripSeparator))
-    [void]$script:hdrTray.ControlsMenu.Items.Add($script:hdrTray.Refresh)
     [void]$script:hdrTray.Menu.Items.Add($script:hdrTray.HdrSettings)
     [void]$script:hdrTray.Menu.Items.Add((New-Object Windows.Forms.ToolStripSeparator))
     [void]$script:hdrTray.Menu.Items.Add($script:hdrTray.Startup)
@@ -301,6 +330,7 @@ function Initialize-HdrTray {
         if (-not (Test-Path -LiteralPath $installedScript)) { [Windows.Forms.Application]::ExitThread(); return }
         Update-HdrTray
         Complete-HdrUpdateCheck
+        Complete-HdrAppUpdate
     })
     $script:hdrTray.PressTracker = [LocalHdrMenu.TrayPressTracker]::new($script:hdrTray.Icon,$script:hdrTray.ControlsMenu,$script:hdrTray.Menu)
 }
@@ -318,6 +348,7 @@ function Close-HdrTray {
     $script:hdrTray.UnavailableIcon.Dispose()
     $script:hdrTray.MenuFont.Dispose()
     if ($null -ne $script:hdrTray.Pending) { $script:hdrTray.Pending.Dispose() }
+    if ($null -ne $script:hdrTray.UpdateProcess) { $script:hdrTray.UpdateProcess.Dispose() }
 }
 
 function Start-HdrTray {

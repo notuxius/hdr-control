@@ -1,4 +1,4 @@
-﻿# Install for the signed-in user. Nilesoft Shell integration is optional.
+# Install for the signed-in user. Nilesoft Shell integration is optional.
 [CmdletBinding()]
 param(
     [ValidateSet('Install','Uninstall')][string]$Action = 'Install',
@@ -84,7 +84,7 @@ try {
             Remove-Item -LiteralPath $importFile
         }
         if (Test-Path -LiteralPath $menuKey) { Remove-Item -LiteralPath $menuKey -Recurse }
-        foreach ($name in @('HdrSdrMenu.ps1','HdrTray.ps1','TrayTheme.cs','Start-Tray.vbs','Toggle-HdrSdr.vbs','HdrSdrMenu.ico','HdrEnabled.ico','HdrDisabled.ico','HdrUnavailable.ico','HdrEnableAction.ico','HdrDisableAction.ico','HdrUnavailableAction.ico','MenuLabel.txt','MenuIcon.txt','Setup.ps1','hdr-context-menu.nss','package.commit')) {
+        foreach ($name in @('HdrSdrMenu.ps1','HdrTray.ps1','TrayTheme.cs','Update-HdrApp.ps1','VERSION','Start-Tray.vbs','Toggle-HdrSdr.vbs','HdrSdrMenu.ico','HdrEnabled.ico','HdrDisabled.ico','HdrUnavailable.ico','HdrEnableAction.ico','HdrDisableAction.ico','HdrUnavailableAction.ico','MenuLabel.txt','MenuIcon.txt','Setup.ps1','hdr-context-menu.nss','package.commit')) {
             $path = Join-Path $installDir $name
             if (Test-Path -LiteralPath $path) { Remove-Item -LiteralPath $path }
         }
@@ -92,7 +92,7 @@ try {
         Write-Output 'HDR Context Menu removed. Configuration backups were retained.'
         return
     }
-    foreach ($name in @('HdrSdrMenu.ps1','HdrTray.ps1','TrayTheme.cs','Start-Tray.vbs','Toggle-HdrSdr.vbs','HdrSdrMenu.ico','HdrEnabled.ico','HdrDisabled.ico','HdrUnavailable.ico','HdrEnableAction.ico','HdrDisableAction.ico','HdrUnavailableAction.ico','hdr-context-menu.nss')) {
+    foreach ($name in @('HdrSdrMenu.ps1','HdrTray.ps1','TrayTheme.cs','Update-HdrApp.ps1','VERSION','Start-Tray.vbs','Toggle-HdrSdr.vbs','HdrSdrMenu.ico','HdrEnabled.ico','HdrDisabled.ico','HdrUnavailable.ico','HdrEnableAction.ico','HdrDisableAction.ico','HdrUnavailableAction.ico','hdr-context-menu.nss')) {
         if (-not (Test-Path -LiteralPath (Join-Path $PSScriptRoot $name))) { throw "Package file missing: $name" }
     }
     if ($installDir.Contains("'") -or $env:SystemRoot.Contains("'")) { throw 'Installation paths cannot contain apostrophes.' }
@@ -106,13 +106,16 @@ try {
     $acl.SetAccessRule($rule)
     Set-Acl -LiteralPath $installDir -AclObject $acl
     Stop-Helper
-    foreach ($name in @('HdrSdrMenu.ps1','HdrTray.ps1','TrayTheme.cs','Start-Tray.vbs','Toggle-HdrSdr.vbs','HdrSdrMenu.ico','HdrEnabled.ico','HdrDisabled.ico','HdrUnavailable.ico','HdrEnableAction.ico','HdrDisableAction.ico','HdrUnavailableAction.ico','Setup.ps1','hdr-context-menu.nss','package.commit')) {
+    foreach ($name in @('HdrSdrMenu.ps1','HdrTray.ps1','TrayTheme.cs','Update-HdrApp.ps1','VERSION','Start-Tray.vbs','Toggle-HdrSdr.vbs','HdrSdrMenu.ico','HdrEnabled.ico','HdrDisabled.ico','HdrUnavailable.ico','HdrEnableAction.ico','HdrDisableAction.ico','HdrUnavailableAction.ico','Setup.ps1','hdr-context-menu.nss','package.commit')) {
         $source = Join-Path $PSScriptRoot $name
         $destination = Join-Path $installDir $name
         if ((Test-Path -LiteralPath $source) -and [IO.Path]::GetFullPath($source) -ne [IO.Path]::GetFullPath($destination)) {
             Backup-File $destination
             Copy-Item -LiteralPath $source -Destination $destination -Force
         }
+    }
+    if (-not (Test-Path -LiteralPath (Join-Path $PSScriptRoot 'package.commit')) -and $PSScriptRoot -ne $installDir) {
+        Remove-Item -LiteralPath (Join-Path $installDir 'package.commit') -ErrorAction SilentlyContinue
     }
     New-Item -Path ($menuKey+'\command') -Force | Out-Null
     New-ItemProperty -LiteralPath $menuKey -Name Owner -Value $owner -PropertyType String -Force | Out-Null
