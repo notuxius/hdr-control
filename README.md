@@ -18,11 +18,15 @@ Both menus open centered above the tray icon, shifting inward near screen edges 
 
 - With one active display, a top **HDR: Enabled / Disabled / Unavailable** status row. With multiple displays, a **Displays** submenu with each monitor's status replaces that row. With no displays detected, the top row shows **HDR: Unavailable**.
 - **Enable HDR / Disable HDR**, matching the current state. The action affects all HDR-capable displays. When HDR is unavailable, the header reads **HDR: Unavailable** and the action is hidden. It reappears automatically when HDR becomes available.
+- **Refresh displays** immediately rereads connected displays and updates their status, the tray icon, and the desktop menu. It remains available when HDR is unavailable.
 
 **Right-click** the icon to show or hide the settings menu. Clicking the other mouse button switches menus. The settings menu contains:
 
 - **Display settings** and **HDR settings** shortcuts with solid gear icons.
-- **Exit**, which closes the helper until the next sign-in. Automatic desktop label refresh also stops until the helper is restarted.
+- **Start with Windows**, a checked toggle for starting the helper at sign-in. The per-user preference survives updates; turning it off leaves the current helper running. The Start menu shortcut always works.
+- **Check for updates**, which compares the installed build with GitHub in the background and offers to open the repository if it differs. Updates can be downloaded and installed through Ketarin; this command does not install anything automatically.
+- **About**, with the installed version and mouse controls.
+- **Exit**, which closes the helper. Automatic desktop label refresh also stops until the helper is restarted (at the next sign-in if startup is enabled).
 
 **Middle-click** (press the mouse wheel) to toggle HDR directly, using the current Windows display state. Further clicks are ignored while a change is in progress. As with the menu command, this affects all active HDR-capable displays.
 

@@ -93,6 +93,71 @@ function Open-HdrSettings([string]$Uri) {
     catch { $script:hdrTray.Icon.ShowBalloonTip(5000, 'HDR Context Menu', 'Windows Settings could not be opened.', [Windows.Forms.ToolTipIcon]::Warning) }
 }
 
+function Get-HdrStartupEnabled {
+    $value = Get-ItemPropertyValue -LiteralPath 'HKCU:\Software\HdrContextMenu' -Name StartWithWindows -ErrorAction SilentlyContinue
+    return $null -eq $value -or $value -ne 0
+}
+
+function Set-HdrStartupEnabled([bool]$Enabled) {
+    New-Item -Path 'HKCU:\Software\HdrContextMenu' -Force -ErrorAction Stop | Out-Null
+    New-ItemProperty -LiteralPath 'HKCU:\Software\HdrContextMenu' -Name StartWithWindows -Value ([int]$Enabled) -PropertyType DWord -Force -ErrorAction Stop | Out-Null
+}
+
+function Switch-HdrStartup {
+    try { Set-HdrStartupEnabled (-not (Get-HdrStartupEnabled)) }
+    catch { $script:hdrTray.Icon.ShowBalloonTip(5000, 'HDR Context Menu', 'The startup preference could not be saved.', [Windows.Forms.ToolTipIcon]::Warning) }
+    $script:hdrTray.Startup.Checked = Get-HdrStartupEnabled
+}
+
+function Get-HdrInstalledVersion {
+    $path = Join-Path $PSScriptRoot 'package.commit'
+    if (Test-Path -LiteralPath $path) {
+        $value = [IO.File]::ReadAllText($path).Trim()
+        if ($value -match '^[a-f0-9]{40}$') { return $value }
+    }
+    return $null
+}
+
+function Show-HdrMessage([string]$Text, [Windows.Forms.MessageBoxButtons]$Buttons = 'OK') {
+    return [Windows.Forms.MessageBox]::Show($Text, 'HDR Context Menu', $Buttons, [Windows.Forms.MessageBoxIcon]::Information)
+}
+
+function Show-HdrAbout {
+    $version = Get-HdrInstalledVersion
+    $label = if ($version) { $version.Substring(0,7) } else { 'Local build' }
+    [void](Show-HdrMessage ("HDR Context Menu`nVersion: $label`n`nLeft click: HDR controls`nRight click: Settings and app options`nMiddle click: Toggle HDR`n`nBy notuxius`ngithub.com/notuxius/hdr-context-menu"))
+}
+
+function Start-HdrUpdateCheck {
+    if ($null -ne $script:hdrTray.UpdateCheck) { return }
+    $script:hdrTray.CheckUpdates.Enabled = $false
+    $script:hdrTray.CheckUpdates.Text = 'Checking for updates...'
+    $script:hdrTray.UpdateCheck = [LocalHdrMenu.UpdateCheck]::new()
+    $script:hdrTray.UpdateCheck.Start()
+}
+
+function Complete-HdrUpdateCheck {
+    $check = $script:hdrTray.UpdateCheck
+    if ($null -eq $check -or -not $check.Finished) { return }
+    $script:hdrTray.UpdateCheck = $null
+    $script:hdrTray.CheckUpdates.Enabled = $true
+    $script:hdrTray.CheckUpdates.Text = 'Check for updates'
+    try {
+        if ($check.Error) { throw $check.Error }
+        $latest = ($check.Result | ConvertFrom-Json -ErrorAction Stop).sha
+        if ($latest -notmatch '^[a-f0-9]{40}$') { throw 'Invalid version response' }
+        $installed = Get-HdrInstalledVersion
+        if ($installed -eq $latest) {
+            [void](Show-HdrMessage 'You have the latest version.')
+        } else {
+            $message = if ($installed) { 'A different version is available on GitHub.' } else { 'The installed version could not be identified.' }
+            if ((Show-HdrMessage ($message + "`n`nOpen GitHub to review it? You can update through Ketarin.") 'YesNo') -eq [Windows.Forms.DialogResult]::Yes) {
+                Open-HdrSettings 'https://github.com/notuxius/hdr-context-menu'
+            }
+        }
+    } catch { [void](Show-HdrMessage 'Could not check for updates. Check your internet connection and try again later.') }
+}
+
 function Start-HdrChange([string]$NextAction) {
     if ($null -ne $script:hdrTray.Pending -or $NextAction -notin @('On','Off','Toggle')) { return }
     try {
@@ -149,6 +214,11 @@ function Initialize-HdrTray {
         Displays = New-Object Windows.Forms.ToolStripMenuItem('Displays')
         HdrSettings = New-Object Windows.Forms.ToolStripMenuItem('HDR settings')
         DisplaySettings = New-Object Windows.Forms.ToolStripMenuItem('Display settings')
+        Refresh = New-Object Windows.Forms.ToolStripMenuItem('Refresh displays')
+        Startup = New-Object Windows.Forms.ToolStripMenuItem('Start with Windows')
+        CheckUpdates = New-Object Windows.Forms.ToolStripMenuItem('Check for updates')
+        About = New-Object Windows.Forms.ToolStripMenuItem('About')
+        UpdateCheck = $null
         Exit = New-Object Windows.Forms.ToolStripMenuItem('Exit')
         Timer = New-Object Windows.Forms.Timer
         EnabledIcon = [Drawing.Icon]::new((Join-Path $PSScriptRoot 'HdrEnabled.ico'), [Windows.Forms.SystemInformation]::SmallIconSize)
@@ -172,8 +242,14 @@ function Initialize-HdrTray {
     [void]$script:hdrTray.ControlsMenu.Items.Add($script:hdrTray.Displays)
     [void]$script:hdrTray.ControlsMenu.Items.Add($script:hdrTray.CommandSeparator)
     [void]$script:hdrTray.ControlsMenu.Items.Add($script:hdrTray.Command)
+    [void]$script:hdrTray.ControlsMenu.Items.Add((New-Object Windows.Forms.ToolStripSeparator))
+    [void]$script:hdrTray.ControlsMenu.Items.Add($script:hdrTray.Refresh)
     [void]$script:hdrTray.Menu.Items.Add($script:hdrTray.DisplaySettings)
     [void]$script:hdrTray.Menu.Items.Add($script:hdrTray.HdrSettings)
+    [void]$script:hdrTray.Menu.Items.Add((New-Object Windows.Forms.ToolStripSeparator))
+    [void]$script:hdrTray.Menu.Items.Add($script:hdrTray.Startup)
+    [void]$script:hdrTray.Menu.Items.Add($script:hdrTray.CheckUpdates)
+    [void]$script:hdrTray.Menu.Items.Add($script:hdrTray.About)
     [void]$script:hdrTray.Menu.Items.Add((New-Object Windows.Forms.ToolStripSeparator))
     [void]$script:hdrTray.Menu.Items.Add($script:hdrTray.Exit)
     $script:hdrTray.Command.Name = 'HdrAction'
@@ -182,6 +258,11 @@ function Initialize-HdrTray {
     $script:hdrTray.HdrSettings.Name = 'HdrSettings'
     $script:hdrTray.DisplaySettings.Name = 'DisplaySettings'
     $script:hdrTray.Exit.Name = 'ExitAction'
+    $script:hdrTray.Refresh.Name = 'RefreshDisplays'
+    $script:hdrTray.Startup.Name = 'Startup'
+    $script:hdrTray.Startup.Checked = Get-HdrStartupEnabled
+    $script:hdrTray.CheckUpdates.Name = 'CheckUpdates'
+    $script:hdrTray.About.Name = 'About'
     $script:hdrTray.Displays.DropDown = New-Object LocalHdrMenu.TrayPopupMenu
     $script:hdrTray.Displays.DropDown.ShowActionIcons = $true
     [LocalHdrMenu.TrayMenuTheme]::Apply($script:hdrTray.Menu, $script:hdrTray.MenuFont)
@@ -190,6 +271,10 @@ function Initialize-HdrTray {
     $script:hdrTray.Command.add_Click({ Start-HdrChange ([string]$script:hdrTray.Command.Tag) })
     $script:hdrTray.HdrSettings.add_Click({ Open-HdrSettings 'ms-settings:display-hdr' })
     $script:hdrTray.DisplaySettings.add_Click({ Open-HdrSettings 'ms-settings:display' })
+    $script:hdrTray.Refresh.add_Click({ Update-HdrTray })
+    $script:hdrTray.Startup.add_Click({ Switch-HdrStartup })
+    $script:hdrTray.CheckUpdates.add_Click({ Start-HdrUpdateCheck })
+    $script:hdrTray.About.add_Click({ Show-HdrAbout })
     # MouseClick suppresses the second click of a double-click; MouseUp lets
     # every left/right click toggle, including fast consecutive clicks.
     $script:hdrTray.Icon.add_MouseUp({
@@ -206,12 +291,13 @@ function Initialize-HdrTray {
         }
     })
     $script:hdrTray.ControlsMenu.add_Opening({ Update-HdrTray })
-    $script:hdrTray.Menu.add_Opening({ $script:hdrTray.ControlsMenu.Close(); Update-HdrTray })
+    $script:hdrTray.Menu.add_Opening({ $script:hdrTray.ControlsMenu.Close(); Update-HdrTray; $script:hdrTray.Startup.Checked = Get-HdrStartupEnabled })
     $script:hdrTray.Exit.add_Click({ [Windows.Forms.Application]::ExitThread() })
     $script:hdrTray.Timer.Interval = 2000
     $script:hdrTray.Timer.add_Tick({
         if (-not (Test-Path -LiteralPath $installedScript)) { [Windows.Forms.Application]::ExitThread(); return }
         Update-HdrTray
+        Complete-HdrUpdateCheck
     })
     $script:hdrTray.PressTracker = [LocalHdrMenu.TrayPressTracker]::new($script:hdrTray.Icon,$script:hdrTray.ControlsMenu,$script:hdrTray.Menu)
 }

@@ -44,7 +44,7 @@ function Stop-Helper {
     $session = (Get-Process -Id $PID).SessionId
     $patterns = @(
         ('(?i)-File\s+"' + [regex]::Escape($runtime) + '"\s+-Action\s+Watch(?:\s|$)'),
-        ('(?i)"' + [regex]::Escape($launcher) + '"\s+Watch(?:\s|$)')
+        ('(?i)"' + [regex]::Escape($launcher) + '"\s+(?:Watch|Startup)(?:\s|$)')
     )
     Get-CimInstance Win32_Process | Where-Object {
         $_.SessionId -eq $session -and $_.Name -in @('powershell.exe','wscript.exe') -and
@@ -73,6 +73,7 @@ try {
     if ($Action -eq 'Uninstall') {
         Stop-Helper
         Unregister-ScheduledTask -TaskName $taskName -Confirm:$false -ErrorAction SilentlyContinue
+        Remove-ItemProperty -LiteralPath 'HKCU:\Software\HdrContextMenu' -Name StartWithWindows -ErrorAction SilentlyContinue
         if ($ownsShortcut) { Remove-Item -LiteralPath $shortcutPath }
         if ($hasShell) {
             $text = [IO.File]::ReadAllText($config)
@@ -142,7 +143,7 @@ try {
             Write-Text $config ($text.TrimEnd()+"`r`n"+$importLine+"`r`n")
         }
     }
-    $taskAction = New-ScheduledTaskAction -Execute (Join-Path $env:SystemRoot 'System32\wscript.exe') -Argument ('//NoLogo "{0}" Watch' -f $launcher)
+    $taskAction = New-ScheduledTaskAction -Execute (Join-Path $env:SystemRoot 'System32\wscript.exe') -Argument ('//NoLogo "{0}" Startup "$(Arg0)"' -f $launcher)
     $trigger = New-ScheduledTaskTrigger -AtLogOn -User $identity.User.Value
     $principal = New-ScheduledTaskPrincipal -UserId $identity.User.Value -LogonType Interactive -RunLevel Limited
     $settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -ExecutionTimeLimit ([TimeSpan]::Zero) -MultipleInstances IgnoreNew
@@ -156,7 +157,11 @@ try {
     $shortcut.Description = 'Start the HDR tray icon and desktop menu helper'
     $shortcut.WindowStyle = 7
     $shortcut.Save()
-    Start-ScheduledTask -TaskName $taskName
+    # Pass a one-time argument through Task Scheduler so explicit installation
+    # starts the limited-user tray even when the saved logon preference is off.
+    $scheduler = New-Object -ComObject Schedule.Service
+    $scheduler.Connect()
+    [void]$scheduler.GetFolder('\').GetTask($taskName).Run('LaunchNow')
     Refresh-Shell
     Write-Output 'HDR Context Menu installed. Reopen the desktop right-click menu.'
 } catch {
