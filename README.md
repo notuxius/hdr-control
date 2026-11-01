@@ -14,7 +14,7 @@ The tray icon has a colored sparkle, a smaller white sparkle, and a status badge
 
 Both menus open centered above the tray icon, shifting inward near screen edges to stay visible. The icon's position is queried each time; the cursor is a fallback only if Windows cannot locate the icon. They use a compact dark style with rounded corners, larger Segoe UI text, spacious rows, and clear hover states. Display details use the same style, and Windows high-contrast colors take precedence when enabled.
 
-**Left-click** the icon for:
+**Left-click** the icon to show or hide the controls menu. Each click toggles it, including rapid consecutive clicks. The menu contains:
 
 - With one active display, a top **HDR: Enabled / Disabled / Unavailable** status row. With multiple displays, a **Displays** submenu with each monitor's status replaces that row. With no displays detected, the top row shows **HDR: Unavailable**.
 - **Enable HDR / Disable HDR**, matching the current state. The action affects all HDR-capable displays. When HDR is unavailable, the header reads **HDR: Unavailable** and the action is hidden. It reappears automatically when HDR becomes available.

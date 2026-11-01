@@ -109,6 +109,10 @@ function Start-HdrChange([string]$NextAction) {
 }
 
 function Show-HdrControls {
+    if ($script:hdrTray.ControlsMenu.Visible) {
+        $script:hdrTray.ControlsMenu.Close()
+        return
+    }
     $script:hdrTray.Menu.Close()
     # Reuse NotifyIcon's native popup handling for focus, taskbar placement,
     # keyboard navigation, and dismissal when clicking elsewhere (.NET 4.x).
@@ -150,6 +154,7 @@ function Initialize-HdrTray {
     $script:hdrTray.ControlsMenu.ShowImageMargin = $false
     $script:hdrTray.Menu.AnchorIcon = $script:hdrTray.Icon
     $script:hdrTray.ControlsMenu.AnchorIcon = $script:hdrTray.Icon
+    $script:hdrTray.ControlsMenu.ToggleOnAnchorClick = $true
     $script:hdrTray.Menu.ShowActionIcons = $true
     $script:hdrTray.ControlsMenu.ShowActionIcons = $true
     [void]$script:hdrTray.ControlsMenu.Items.Add($script:hdrTray.Status)
@@ -174,10 +179,15 @@ function Initialize-HdrTray {
     $script:hdrTray.Command.add_Click({ Start-HdrChange ([string]$script:hdrTray.Command.Tag) })
     $script:hdrTray.HdrSettings.add_Click({ Open-HdrSettings 'ms-settings:display-hdr' })
     $script:hdrTray.DisplaySettings.add_Click({ Open-HdrSettings 'ms-settings:display' })
-    $script:hdrTray.Icon.add_MouseClick({
+    # MouseClick suppresses the second click of a double-click; MouseUp lets
+    # every left click toggle, including fast consecutive clicks.
+    $script:hdrTray.Icon.add_MouseUp({
         param($sender, $eventArgs)
         if ($eventArgs.Button -eq [Windows.Forms.MouseButtons]::Left) { Show-HdrControls }
-        elseif ($eventArgs.Button -eq [Windows.Forms.MouseButtons]::Middle) {
+    })
+    $script:hdrTray.Icon.add_MouseClick({
+        param($sender, $eventArgs)
+        if ($eventArgs.Button -eq [Windows.Forms.MouseButtons]::Middle) {
             Start-HdrChange 'Toggle'
         }
     })
