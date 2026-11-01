@@ -253,10 +253,12 @@ namespace LocalHdrMenu {
                     if (item.Name == "HdrSettings") {
                         // Preserve the two-sparkle motif, with the same outline
                         // weight as the other menu symbols instead of a solid fill.
-                        AddSparkle(path,5.75f,6,4.25f);
+                        // The complete artwork spans 14 DIP (1..15); enlarge
+                        // its geometry rather than scaling the shared pen.
+                        AddSparkle(path,5.75f,5.75f,4.75f);
                         g.DrawPath(pen,path);
                         path.Reset();
-                        AddSparkle(path,12.25f,3.5f,1.5f);
+                        AddSparkle(path,12.5f,3,1.5f);
                         // The tiny accent is a single filled mark, like the info dot.
                         using (var brush = new SolidBrush(color)) g.FillPath(brush,path);
                         path.Reset();
@@ -285,15 +287,15 @@ namespace LocalHdrMenu {
                         path.StartFigure();
                         path.AddLines(new PointF[] {new PointF(1.5f,11),new PointF(1.5f,14.5f),new PointF(14.5f,14.5f),new PointF(14.5f,11)});
                     } else if (item.Name == "About") {
-                        path.AddEllipse(1.5f,1.5f,13,13);
+                        path.AddEllipse(1,1,14,14);
                         AddStroke(path,8,7.5f,8,11.5f);
                         using (var brush = new SolidBrush(color)) g.FillEllipse(brush,7.25f,4,1.5f,1.5f);
                     } else if (item.Name == "Startup") {
-                        path.AddEllipse(1.5f,1.5f,13,13);
+                        path.AddEllipse(1,1,14,14);
                         if (((ToolStripMenuItem)item).Checked) AddCheck(path);
                     } else if (item.Name == "ExitAction") {
-                        path.AddArc(1.5f,1.5f,13,13,-45,270);
-                        AddStroke(path,8,1.5f,8,7.5f);
+                        path.AddArc(1,1,14,14,-45,270);
+                        AddStroke(path,8,1,8,7.5f);
                     } else if (item.Name == "HdrStatus" || item.Name == "HdrAction") {
                         path.AddEllipse(1,1,14,14);
                         if (status == "HDR: Unavailable") {
@@ -332,10 +334,10 @@ namespace LocalHdrMenu {
             var gear = new PointF[24];
             for (int i = 0; i < gear.Length; i++) {
                 double angle = i * Math.PI / 12;
-                float radius = i % 4 == 1 || i % 4 == 2 ? 2.8f : 2.05f;
-                gear[i] = new PointF(11.7f + radius * (float)Math.Cos(angle), 11.7f + radius * (float)Math.Sin(angle));
+                float radius = i % 4 == 1 || i % 4 == 2 ? 3f : 2.2f;
+                gear[i] = new PointF(12.1f + radius * (float)Math.Cos(angle), 12.1f + radius * (float)Math.Sin(angle));
             }
-            using (var backdrop = new SolidBrush(background)) g.FillEllipse(backdrop,7.8f,7.8f,7.8f,7.8f);
+            using (var backdrop = new SolidBrush(background)) g.FillEllipse(backdrop,8.1f,8.1f,8,8);
             using (var path = new GraphicsPath()) {
                 path.AddPolygon(gear);
                 g.DrawPath(pen,path);
