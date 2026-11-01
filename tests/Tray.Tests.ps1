@@ -38,8 +38,8 @@ Initialize-HdrTray
 try {
     Assert ($null -ne $script:hdrTray.ShowMenuMethod) 'Native tray popup method unavailable'
     Assert ($null -eq $script:hdrTray.Icon.ContextMenuStrip) 'Automatic right-click opening must stay disabled'
-    Assert (($script:hdrTray.Menu.Items | Where-Object {$_ -is [Windows.Forms.ToolStripMenuItem] -and $_ -isnot [LocalHdrMenu.TrayStatusItem]} | ForEach-Object Text) -join '|' -eq 'Display settings|HDR settings|Start with Windows|Check for updates|About|Exit') 'Right-click menu contains wrong items'
-    Assert ($script:hdrTray.Menu.Items.Count -eq 8 -and $script:hdrTray.Menu.Items[2] -is [Windows.Forms.ToolStripSeparator] -and $script:hdrTray.Menu.Items[6] -is [Windows.Forms.ToolStripSeparator]) 'Right-click menu groups are incorrect'
+    Assert (($script:hdrTray.Menu.Items | Where-Object {$_ -is [Windows.Forms.ToolStripMenuItem] -and $_ -isnot [LocalHdrMenu.TrayStatusItem]} | ForEach-Object Text) -join '|' -eq 'HDR settings|Start with Windows|Check for updates|About|Exit') 'Right-click menu contains wrong items'
+    Assert ($script:hdrTray.Menu.Items.Count -eq 7 -and $script:hdrTray.Menu.Items[1] -is [Windows.Forms.ToolStripSeparator] -and $script:hdrTray.Menu.Items[5] -is [Windows.Forms.ToolStripSeparator]) 'Right-click menu groups are incorrect'
     Assert ($script:hdrTray.Startup.Checked) 'Startup should reflect the stored preference'
     $script:hdrTray.Startup.PerformClick()
     Assert (-not $script:testStartup -and -not $script:hdrTray.Startup.Checked) 'Startup toggle should save disabled without exiting the tray'
@@ -140,8 +140,6 @@ try {
     Assert ($script:hdrTray.Command.Available -and $script:hdrTray.CommandSeparator.Available) 'HDR action did not reappear on recovery'
     $script:hdrTray.HdrSettings.PerformClick()
     Assert ($script:requestedUri -eq 'ms-settings:display-hdr') 'HDR settings link incorrect'
-    $script:hdrTray.DisplaySettings.PerformClick()
-    Assert ($script:requestedUri -eq 'ms-settings:display') 'Display settings link incorrect'
     Assert ($script:syncCount -eq 6) 'Desktop label synchronization stopped'
     [LocalHdrMenu.DisplayApi]::Displays = @((Display 'Reconnected' $false $false))
     $script:hdrTray.Refresh.PerformClick()

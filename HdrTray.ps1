@@ -213,7 +213,6 @@ function Initialize-HdrTray {
         CommandSeparator = New-Object Windows.Forms.ToolStripSeparator
         Displays = New-Object Windows.Forms.ToolStripMenuItem('Displays')
         HdrSettings = New-Object Windows.Forms.ToolStripMenuItem('HDR settings')
-        DisplaySettings = New-Object Windows.Forms.ToolStripMenuItem('Display settings')
         Refresh = New-Object Windows.Forms.ToolStripMenuItem('Refresh displays')
         Startup = New-Object Windows.Forms.ToolStripMenuItem('Start with Windows')
         CheckUpdates = New-Object Windows.Forms.ToolStripMenuItem('Check for updates')
@@ -244,7 +243,6 @@ function Initialize-HdrTray {
     [void]$script:hdrTray.ControlsMenu.Items.Add($script:hdrTray.Command)
     [void]$script:hdrTray.ControlsMenu.Items.Add((New-Object Windows.Forms.ToolStripSeparator))
     [void]$script:hdrTray.ControlsMenu.Items.Add($script:hdrTray.Refresh)
-    [void]$script:hdrTray.Menu.Items.Add($script:hdrTray.DisplaySettings)
     [void]$script:hdrTray.Menu.Items.Add($script:hdrTray.HdrSettings)
     [void]$script:hdrTray.Menu.Items.Add((New-Object Windows.Forms.ToolStripSeparator))
     [void]$script:hdrTray.Menu.Items.Add($script:hdrTray.Startup)
@@ -256,7 +254,6 @@ function Initialize-HdrTray {
     $script:hdrTray.Status.Name = 'HdrStatus'
     $script:hdrTray.Displays.Name = 'Displays'
     $script:hdrTray.HdrSettings.Name = 'HdrSettings'
-    $script:hdrTray.DisplaySettings.Name = 'DisplaySettings'
     $script:hdrTray.Exit.Name = 'ExitAction'
     $script:hdrTray.Refresh.Name = 'RefreshDisplays'
     $script:hdrTray.Startup.Name = 'Startup'
@@ -270,7 +267,6 @@ function Initialize-HdrTray {
     [LocalHdrMenu.TrayMenuTheme]::Apply($script:hdrTray.Displays.DropDown, $script:hdrTray.MenuFont)
     $script:hdrTray.Command.add_Click({ Start-HdrChange ([string]$script:hdrTray.Command.Tag) })
     $script:hdrTray.HdrSettings.add_Click({ Open-HdrSettings 'ms-settings:display-hdr' })
-    $script:hdrTray.DisplaySettings.add_Click({ Open-HdrSettings 'ms-settings:display' })
     $script:hdrTray.Refresh.add_Click({ Update-HdrTray })
     $script:hdrTray.Startup.add_Click({ Switch-HdrStartup })
     $script:hdrTray.CheckUpdates.add_Click({ Start-HdrUpdateCheck })
