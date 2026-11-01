@@ -1,7 +1,13 @@
 # HDR Context Menu community list v1
 # Maintained at https://github.com/notuxius/hdr-context-menu
-# Initial HDR-Auto snapshot: 2026-11-01; duplicates and Launcher.exe removed.
-# One executable filename per line. Keep this header and the license notice.
+# Reviewed: 2026-11-01. Scope: native PC HDR only; not Windows Auto HDR, RTX HDR, or mod-only HDR.
+# Initial HDR-Auto snapshot: 2026-11-01. Original attribution and MIT notice retained below.
+# Evidence: publisher HDR declarations and direct measurements of built-in PC HDR modes.
+# Steam launch metadata is publisher-authored data retrieved through the SteamCMD API mirror.
+# Existing executable names are inherited unless an Executable source is given; storefronts may differ.
+# This is a conservative list, not an exhaustive HDR catalog or a claim of hands-on testing.
+# Unconfirmed/replaced inherited entries are inactive comments at the end. Unconfirmed does not mean unsupported.
+# Keep the first format header and license notice. Only uncommented .exe lines are matched.
 #
 # HDR-Auto community list: https://github.com/noahz123/HDR-Auto
 # MIT License
@@ -26,385 +32,942 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
+# ACTIVE: 160 executable names.
+
+# 007 First Light
+# HDR: https://github.com/KoKlusz/HDR-Gaming-Database/discussions/144
 007FirstLight.exe
+
+# A Plague Tale: Requiem
+# HDR: https://github.com/KoKlusz/HDR-Gaming-Database/discussions/135
 APlagueTaleRequiem_x64.exe
-ABRISS.exe
-AdInfinitum.exe
-RelicCardinal.exe
-AgentIntercept.exe
-AgentsOfMayhem.exe
+
+# Alan Wake 2
+# HDR: https://www.alanwake.com/story/alan-wake-2-faq/
 AlanWake2.exe
+
+# Alan Wake Remastered
+# HDR: https://www.alanwake.com/story/alan-wake-remastered-pc-update-2026/
 AlanWakeRemastered.exe
-AlienWeaponTestGrounds.exe
-AlienRogueIncursionEvolvedEdition.exe
-AloneInTheDark.exe
-amtrucks.exe
-Anno117PaxRomana.exe
-Anthem.exe
-ArcadeParadise.exe
-Arcadegeddon.exe
-ArcticAwakening.exe
-ArkAscended.exe
-armoredcore6.exe
-AsDuskFalls.exe
-ACIII.exe
+
+# Assassin's Creed Black Flag Resynced
+# HDR: https://store.steampowered.com/app/3751950/
+# Executable: https://api.steamcmd.net/v1/info/3751950
+ACBlackFlag.exe
+
+# Assassin's Creed Mirage
+# HDR: https://store.steampowered.com/app/3035570/
 ACMirage.exe
+
+# Assassin's Creed® Odyssey
+# HDR: https://store.steampowered.com/app/812140/
 ACOdyssey.exe
+
+# Assassin's Creed® Origins
+# HDR: https://store.steampowered.com/app/582160/
 ACOrigins.exe
+
+# Assassin’s Creed Shadows
+# HDR: https://store.steampowered.com/app/3159330/
 ACShadows.exe
-ACValhalla.exe
-AssassinsCreedBlackFlagResynced.exe
-AC2-Win64-Shipping.exe
-AtelierReslerianaTheRedAlchemistAndTheWhiteGuardian.exe
+
+# Atomfall
+# HDR: https://store.steampowered.com/app/801800/
 Atomfall.exe
-AtomicHeart2.exe
+
+# Avatar: Frontiers of Pandora™
+# HDR: https://store.steampowered.com/app/2840770/
 AFOP.exe
+
+# Avowed
+# HDR: https://github.com/KoKlusz/HDR-Gaming-Database/discussions/44
 Avowed.exe
+
+# Back 4 Blood
+# HDR: https://store.steampowered.com/app/924970/
 Back4Blood.exe
+
+# Baldur's Gate 3 (DirectX 11)
+# HDR: https://store.steampowered.com/news/posts/?appids=1086940&enddate=1657215056&feed=steam_community_announcements
+# Executable: https://larian.com/support/faqs/crashing-upon-startup-pc_59
+bg3_dx11.exe
+
+# Baldur's Gate 3 (Vulkan)
+# HDR: https://store.steampowered.com/news/posts/?appids=1086940&enddate=1657215056&feed=steam_community_announcements
+# Executable: https://larian.com/support/faqs/crashing-upon-startup-pc_59
 bg3.exe
-barony.exe
+
+# Battlefield™ 1
+# HDR: https://store.steampowered.com/app/1238840/
 bf1.exe
-BF2042.exe
+
+# Battlefield™ 6
+# HDR: https://store.steampowered.com/app/2807960/
 BF6.exe
+
+# Battlefield™ V
+# HDR: https://store.steampowered.com/app/1238810/
 bfv.exe
-BlackWidowRecharged.exe
-BladesOfFire.exe
-BleakHaven.exe
-BloodlinesOfPrima.exe
-Borderlands3.exe
-Borderlands4.exe
-BrickRigs.exe
-Brickadia.exe
-Brothers.exe
-BuildingRelationships.exe
-BusSimulator21.exe
-Bzzzt.exe
-cod.exe
+
+# Brickadia
+# HDR: https://store.steampowered.com/app/2199420/
+# Executable: https://api.steamcmd.net/v1/info/2199420
+BrickadiaSteam-Win64-Shipping.exe
+
+# Call of Duty Black Ops Cold War
+# HDR: https://github.com/KoKlusz/HDR-Gaming-Database/discussions/14
 BlackOpsColdWar.exe
-BlackOps4.exe
-ModernWarfare.exe
+
+# Call of Duty Vanguard
+# HDR: https://github.com/KoKlusz/HDR-Gaming-Database/discussions/16
 Vanguard.exe
+
+# Call of Duty WWII
+# HDR: https://github.com/KoKlusz/HDR-Gaming-Database/discussions/101
 s2_sp64_ship.exe
-CaptainBlood.exe
-CaptainGazmanDayOfTheRage.exe
-CatapultQuest.exe
-CelestialCommand.exe
-ChasmalFear.exe
-ChernobylTerroristAttack.exe
-Chess2.exe
-ChinesePaladinSwordAndFairy6.exe
-ChronoOdyssey.exe
-ComedyNight.exe
-ContraRC.exe
-ContractVille.exe
+
+# Call of Duty: Modern Warfare (2019)
+# HDR: https://github.com/KoKlusz/HDR-Gaming-Database/discussions/16
+ModernWarfare.exe
+
+# Call of Duty®
+# HDR: https://store.steampowered.com/app/1938090/
+cod.exe
+
+# CONTROL Ultimate Edition
+# HDR: https://store.steampowered.com/app/870780/
 Control_DX12.exe
-Crackdown3.exe
-CrimsonDesert.exe
-CronosTheNewDawn.exe
+
+# Cronos: The New Dawn
+# HDR: https://store.steampowered.com/app/2101960/
+# Executable: https://api.steamcmd.net/v1/info/2101960
+Cronos.exe
+
+# Crysis Remastered
+# HDR: https://github.com/KoKlusz/HDR-Gaming-Database/discussions/103
 CrysisRemastered.exe
-CthulhuTheCosmicAbyss.exe
-Cube.exe
-DarkAndLight.exe
-DawnBreakOrigin.exe
+
+# Cyberpunk 2077
+# HDR: https://store.steampowered.com/app/1091500/
+# Executable: https://support.cdprojektred.com/en/cyberpunk%20/pc/sp-technical/issue/1568/contact-to-support
+Cyberpunk2077.exe
+
+# Days Gone
+# HDR: https://github.com/KoKlusz/HDR-Gaming-Database/discussions/88
 DaysGone.exe
-DeadFormat.exe
-DeadIsland-Win64-Shipping.exe
-DRDR.exe
+
+# Dead Space
+# HDR: https://store.steampowered.com/app/1693980/
 Dead Space.exe
-ds.exe
+
+# Death Stranding 2: On the Beach
+# HDR: https://github.com/KoKlusz/HDR-Gaming-Database/discussions/119
 ds2.exe
+
+# Death Stranding Directors Cut
+# HDR: https://github.com/KoKlusz/HDR-Gaming-Database/discussions/21
+ds.exe
+
+# DEATHLOOP
+# HDR: https://store.steampowered.com/app/1252330/
 Deathloop.exe
+
+# Deliver Us Mars
+# HDR: https://store.steampowered.com/app/1345890/
 DeliverUsMars.exe
-Desordre.exe
+
+# Destiny 2
+# HDR: https://github.com/KoKlusz/HDR-Gaming-Database/discussions/106
 destiny2.exe
+
+# Detroit Become Human
+# HDR: https://github.com/KoKlusz/HDR-Gaming-Database/discussions/105
 DetroitBecomeHuman.exe
-D2R.exe
+
+# Devil May Cry 5
+# HDR: https://store.steampowered.com/app/601150/
+# Executable: https://www.capcom.co.jp/support/faq/platform_pc_devil5_0143584.html
+DevilMayCry5.exe
+
+# Diablo IV
+# HDR: https://github.com/KoKlusz/HDR-Gaming-Database/discussions/23
 Diablo IV.exe
-Dinkum.exe
+
+# Directive 8020
+# HDR: https://store.steampowered.com/app/2255370/
 Directive8020.exe
-DIRT5.exe
+
+# Disco Elysium
+# HDR: https://github.com/KoKlusz/HDR-Gaming-Database/discussions/107
 disco.exe
-Speedstorm.exe
-Disorder.exe
-DistantWorlds2.exe
-EoCApp.exe
+
+# DOOM Eternal
+# HDR: https://store.steampowered.com/app/782330/
 DOOMEternalx64vk.exe
+
+# DOOM: The Dark Ages
+# HDR: https://store.steampowered.com/app/3017860/
 DOOMTheDarkAges.exe
+
+# DRAGON BALL: Sparking! ZERO
+# HDR: https://store.steampowered.com/app/1790600/
 SparkingZERO.exe
+
+# Dragon's Dogma 2
+# HDR: https://store.steampowered.com/app/2054970/
 DD2.exe
-DreamEnginesNomadCities.exe
-DualUniverse.exe
-Duskfade.exe
-DyingLightGame_TheBeast.exe
+
+# Dying Light: The Beast
+# HDR: https://github.com/KoKlusz/HDR-Gaming-Database/discussions/53
+# Executable: https://api.steamcmd.net/v1/info/3008130
+DyingLightGame_TheBeast_x64_rwdi.exe
+
+# DYNASTY WARRIORS: ORIGINS
+# HDR: https://store.steampowered.com/app/2384580/
 DWOrigins.exe
-FC24.exe
-FC25.exe
+
+# EA SPORTS FC™ 26
+# HDR: https://store.steampowered.com/app/3405690/
 FC26.exe
-PGATour.exe
-WRC.exe
-EchoesOfTheEnd.exe
-EchoesOfTheLiving.exe
+
+# Elden Ring
+# HDR: https://github.com/KoKlusz/HDR-Gaming-Database/discussions/108
 eldenring.exe
-nightreign.exe
-ElementalWar.exe
-Elin.exe
-EreaDroneSimulator.exe
-eurotrucks2.exe
-ES2-Win64-Shipping.exe
+
+# EVERYBODY'S GOLF HOT SHOTS
+# HDR: https://store.steampowered.com/app/2730810/
 EverybodysGolfHotShots.exe
-EvilGenius_vulkan.exe
-Evotinction.exe
-Exodus.exe
+
+# Exoprimal
+# HDR: https://store.steampowered.com/app/1286320/
 Exoprimal.exe
-F1_2017.exe
-F1_2018.exe
-F1_2019.exe
-F1_2020.exe
-F1_2021.exe
-F1_22.exe
-F1_23.exe
+
+# F1® 24
+# HDR: https://store.steampowered.com/app/2488620/
 F1_24.exe
+
+# F1® 25
+# HDR: https://store.steampowered.com/app/3059520/
 F1_25.exe
-FactoryCoinMining.exe
-FantasyLifeITheGirlWhoStealsTime.exe
+
+# FANTASY LIFE i: The Girl Who Steals Time
+# HDR: https://store.steampowered.com/app/2993780/
+# Executable: https://api.steamcmd.net/v1/info/2993780
+NFL1.exe
+
+# Far Cry® 5
+# HDR: https://store.steampowered.com/app/552520/
 FarCry5.exe
+
+# Far Cry® 6
+# HDR: https://store.steampowered.com/app/2369390/
 FarCry6.exe
-FarCryNewDawn.exe
-FatalFrameIICrimsonButterflyRemake.exe
+
+# FBC Firebreak
+# HDR: https://github.com/KoKlusz/HDR-Gaming-Database/discussions/33
 FBCFirebreak.exe
-FearTheDarkUnknown.exe
-FeltThatBoxing.exe
+
+# FINAL FANTASY VII REBIRTH
+# HDR: https://store.steampowered.com/app/2909400/
 ff7rebirth_.exe
+
+# Final Fantasy VII Remake Intergrade
+# HDR: https://github.com/KoKlusz/HDR-Gaming-Database/discussions/28
 ff7remake_.exe
+
+# FINAL FANTASY XVI
+# HDR: https://store.steampowered.com/app/2515020/
 ffxvi.exe
-Firmament.exe
-FishingNorthAtlantic.exe
-FootballManager2020.exe
-FootballManager2020Touch.exe
-forhonor.exe
+
+# Forza Horizon 4
+# HDR: https://github.com/KoKlusz/HDR-Gaming-Database/discussions/31
 ForzaHorizon4.exe
+
+# Forza Horizon 5
+# HDR: https://store.steampowered.com/app/1551360/
 ForzaHorizon5.exe
+
+# Forza Horizon 6
+# HDR: https://store.steampowered.com/app/2483190/
 ForzaHorizon6.exe
-ForzaMotorsport7.exe
-FuckPutin.exe
-Fuser.exe
-GartenOfBanban7.exe
-GatesOfHell.exe
-GearsOfWarReloaded.exe
+
+# FUCK PUTIN
+# HDR: https://store.steampowered.com/app/1926680/
+# Executable: https://api.steamcmd.net/v1/info/1926680
+FP.exe
+
+# Gears 5
+# HDR: https://github.com/KoKlusz/HDR-Gaming-Database/discussions/34
 GearGame.exe
-GeorgieYolkie.exe
+
+# Gears of War Reloaded
+# HDR: https://github.com/KoKlusz/HDR-Gaming-Database/discussions/46
+# Executable: https://api.steamcmd.net/v1/info/2523720
+WarGame-Steam-SteamRelease.exe
+
+# Ghost of Tsushima DIRECTOR'S CUT
+# HDR: https://store.steampowered.com/app/2215430/
 GhostOfTsushima.exe
-Ghostbusters.exe
-GWT.exe
+
+# God of War
+# HDR: https://github.com/KoKlusz/HDR-Gaming-Database/discussions/35
 GoW.exe
+
+# God of War Ragnarök
+# HDR: https://store.steampowered.com/app/2322010/
 GoWR.exe
-Aperion-Win64-Shipping.exe
-GoriCuddlyCarnage.exe
+
+# Gotham Knights
+# HDR: https://store.steampowered.com/app/1496790/
 GothamKnights.exe
-Gravel.exe
-GRID.exe
-GRIDLegends.exe
-Gylt.exe
-HaloInfinite.exe
-halowars2.exe
-HaroldHalibut.exe
-Hedon.exe
+
+# Harold Halibut
+# HDR: https://store.steampowered.com/app/924750/
+# Executable: https://api.steamcmd.net/v1/info/924750
+Harold Halibut.exe
+
+# Hell is Us
+# HDR: https://store.steampowered.com/app/1620730/
 HellIsUs.exe
+
+# Hellblade Senua's Sacrifice
+# HDR: https://github.com/KoKlusz/HDR-Gaming-Database/discussions/47
 HellbladeGame-Win64-Shipping.exe
-helldivers2.exe
-Hellmart.exe
-HelloNeighbor2.exe
-HITMAN.exe
-HITMAN2.exe
+
+# Hitman: World of Assassination
+# HDR: https://github.com/KoKlusz/HDR-Gaming-Database/discussions/92
 HITMAN3.exe
+
+# Hogwarts Legacy
+# HDR: https://store.steampowered.com/app/990080/
 HogwartsLegacy.exe
-Homeworld3.exe
+
+# Horizon Forbidden West™ Complete Edition
+# HDR: https://store.steampowered.com/app/2420110/
 HorizonForbiddenWest.exe
+
+# Horizon Zero Dawn Complete Edition
+# HDR: https://github.com/KoKlusz/HDR-Gaming-Database/discussions/49
 HorizonZeroDawn.exe
+
+# Horizon Zero Dawn Remastered
+# HDR: https://github.com/KoKlusz/HDR-Gaming-Database/discussions/50
 HorizonZeroDawnRemastered.exe
-hotwheels.exe
-HouseOfAshes.exe
-HuntGame.exe
-IkumaTheFrozenCompass.exe
-Ill.exe
+
+# Immortals Fenyx Rising
+# HDR: https://store.steampowered.com/app/2221920/
 ImmortalsFenyxRising.exe
-ImmortalsOfAveum-Win64-Shipping.exe
-InazumaElevenVictoryRoad.exe
+
+# INAZUMA ELEVEN: Victory Road
+# HDR: https://store.steampowered.com/app/2799860/
+# Executable: https://api.steamcmd.net/v1/info/2799860
+nie.exe
+
+# Indiana Jones and the Great Circle
+# HDR: https://store.steampowered.com/app/2677660/
 TheGreatCircle.exe
-InFluxRedux.exe
+
+# InFlux Redux
+# HDR: https://store.steampowered.com/app/867150/
+# Executable: https://api.steamcmd.net/v1/info/867150
+InFluxRedux-Win64-Shipping.exe
+
+# Injustice™ 2
+# HDR: https://store.steampowered.com/app/627270/
 Injustice2.exe
-iRacingSim64DX11.exe
-Ironsight.exe
-JurassicWorldEvolution3.exe
-Jusant-Win64-Shipping.exe
-JusticeOnline.exe
-KarmaTheDarkWorld.exe
+
+# Jurassic World Evolution 3
+# HDR: https://store.steampowered.com/app/2958130/
+# Executable: https://api.steamcmd.net/v1/info/2958130
+JWE3.exe
+
+# Jusant
+# HDR: https://github.com/KoKlusz/HDR-Gaming-Database/discussions/52
+# Executable: https://api.steamcmd.net/v1/info/1977170
+ASC-Win64-Shipping.exe
+
+# KARMA: The Dark World
+# HDR: https://store.steampowered.com/app/1376200/
+# Executable: https://api.steamcmd.net/v1/info/1376200
+Karma.exe
+
+# Keeper
+# HDR: https://store.steampowered.com/app/3043580/
 Keeper.exe
-KF3.exe
-KingdomCome.exe
+
+# Kingdom Hearts III + Re Mind
+# HDR: https://github.com/KoKlusz/HDR-Gaming-Database/discussions/55
 KINGDOM HEARTS III.exe
-KlausVeensTreason.exe
-KnivesOut.exe
-KunitsuGami.exe
-LayersOfFear.exe
-LegoBatmanLegacyOfTheDarkKnight.exe
-LegoHorizonAdventures.exe
+
+# LEGO® Batman™: Legacy of the Dark Knight
+# HDR: https://store.steampowered.com/app/2215200/
+# Executable: https://api.steamcmd.net/v1/info/2215200
+LEGOBatmanLotDK.exe
+
+# LEGO® Star Wars™: The Skywalker Saga
+# HDR: https://store.steampowered.com/app/920210/
 LEGOSTARWARSSKYWALKERSAGA_DX11.exe
-LOP-Win64-Shipping.exe
+
+# Life Is Strange: Double Exposure
+# HDR: https://github.com/KoKlusz/HDR-Gaming-Database/discussions/113
 Chronos-Win64-Shipping.exe
-LifeIsStrangeReunion.exe
+
+# Life is Strange: True Colors
+# HDR: https://github.com/KoKlusz/HDR-Gaming-Database/discussions/112
 Siren-Win64-Shipping.exe
-LikeADragonGaiden.exe
-LikeADragon8.exe
-PirateYakuzaInHawaii.exe
-LiminalPoint.exe
-LittleHope.exe
-LOTF2-Win64-Shipping.exe
-LordsOfTheFallenII.exe
-LostEmberRekindledEdition.exe
-LostRecords.exe
+
+# Lost Soul Aside™
+# HDR: https://store.steampowered.com/app/3378960/
 LostSoulAside.exe
-Madden19.exe
-Madden20.exe
-Madden21.exe
-Madden22.exe
-Madden23.exe
-Madden24.exe
-Madden25.exe
-Madden26.exe
+
+# Mafia: The Old Country
+# HDR: https://store.steampowered.com/app/1941540/
 MafiaTheOldCountry.exe
-ManOfMedan.exe
+
+# Marathon
+# HDR: https://github.com/KoKlusz/HDR-Gaming-Database/discussions/116
 Marathon.exe
-Avengers.exe
+
+# Marvel's Guardians of the Galaxy
+# HDR: https://github.com/KoKlusz/HDR-Gaming-Database/discussions/37
 gotg.exe
-MidnightSuns.exe
+
+# Marvel's Spider-Man 2
+# HDR: https://store.steampowered.com/app/2651280/
 Spider-Man2.exe
+
+# Marvel's Spider-Man Remastered
+# HDR: https://github.com/KoKlusz/HDR-Gaming-Database/discussions/38
 Spider-Man.exe
+
+# Marvel’s Spider-Man Miles Morales
+# HDR: https://github.com/KoKlusz/HDR-Gaming-Database/discussions/38
 MilesMorales.exe
-MassEffectLauncher.exe
-MassEffectAndromeda.exe
-MegatonMusashiWired.exe
+
+# Mass Effect Legendary Edition - Mass Effect 1
+# HDR: https://www.ea.com/able/resources/mass-effect-legendary-edition/pc
+# Executable: https://forums.ea.com/discussions/mass-effect-franchise-discussion-en/re-its-not-working-on-windows-11/9176912
+MassEffect1.exe
+
+# MEGATON MUSASHI W: WIRED
+# HDR: https://store.steampowered.com/app/2450450/
+# Executable: https://api.steamcmd.net/v1/info/2450450
+MEGATON MUSASHI W.exe
+
+# METAL GEAR SOLID Δ: SNAKE EATER
+# HDR: https://store.steampowered.com/app/2417610/
 MGSDelta.exe
+
+# Metro Exodus Enhanced Edition
+# HDR: https://github.com/KoKlusz/HDR-Gaming-Database/discussions/90
 MetroExodus.exe
+
+# Microsoft Flight Simulator (2020) 40th Anniversary Edition
+# HDR: https://store.steampowered.com/app/1250410/
 FlightSimulator.exe
+
+# Microsoft Flight Simulator 2024
+# HDR: https://store.steampowered.com/app/2537590/
 FlightSimulator2024.exe
-ShadowOfWar.exe
-MilitaryConflictVietnam.exe
-MindsEye.exe
-Monopoly.exe
-MonsterEnergySupercross.exe
-MonsterEnergySupercross3.exe
+
+# MONSTER HUNTER RISE
+# HDR: https://store.steampowered.com/app/1446780/
 MonsterHunterRise.exe
+
+# Monster Hunter Wilds
+# HDR: https://store.steampowered.com/app/2246340/
 MonsterHunterWilds.exe
+
+# Monster Hunter: World
+# HDR: https://store.steampowered.com/app/582010/
 MonsterHunterWorld.exe
+
+# Mortal Kombat 1
+# HDR: https://store.steampowered.com/app/1971870/
 MK12.exe
+
+# Mortal Kombat 11
+# HDR: https://github.com/KoKlusz/HDR-Gaming-Database/discussions/117
 MK11.exe
-motogp18.exe
-motogp19.exe
-motogp20.exe
+
+# MotoGP™24
+# HDR: https://store.steampowered.com/app/2581700/
 motogp24.exe
-MutantOps.exe
-mxgp19.exe
-MXGPPro.exe
+
+# Myst
+# HDR: https://store.steampowered.com/app/1255560/
 Myst.exe
-NASCAR25.exe
-NASCARArcadeRush.exe
-NBA2K26.exe
-NBB.exe
+
+# Need for Speed™ Heat
+# HDR: https://store.steampowered.com/app/1222680/
 NeedForSpeedHeat.exe
+
+# Need for Speed™ Unbound
+# HDR: https://store.steampowered.com/app/1846380/
 NeedForSpeedUnbound.exe
-NewWorld.exe
+
+# NINJA GAIDEN 2 Black
+# HDR: https://store.steampowered.com/app/3287520/
 NINJAGAIDEN2BLACK.exe
-NinjaGaiden4.exe
+
+# Ninja Gaiden 4
+# HDR: https://github.com/KoKlusz/HDR-Gaming-Database/discussions/71
+# Executable: https://api.steamcmd.net/v1/info/2627260
+NINJAGAIDEN4-Steam.exe
+
+# Nioh 2 – The Complete Edition
+# HDR: https://store.steampowered.com/app/1325200/
 nioh2.exe
+
+# Nioh 3
+# HDR: https://github.com/KoKlusz/HDR-Gaming-Database/discussions/109
 Nioh3.exe
+
+# No Man's Sky
+# HDR: https://store.steampowered.com/app/275850/
+# Executable: https://api.steamcmd.net/v1/info/275850
+NMS.exe
+
+# No Rest for the Wicked
+# HDR: https://store.steampowered.com/app/1371980/
 NoRestForTheWicked.exe
-NuclearNightmare.exe
-ObserverSystemRedux.exe
-OffTheGrid.exe
-Ontos.exe
+
+# Ori and the Will of the Wisps
+# HDR: https://store.steampowered.com/app/1057090/
 oriwotw.exe
-OsirisNewDawn.exe
-OUTRIDERS-Win64-Shipping.exe
+
+# Overwatch
+# HDR: https://github.com/KoKlusz/HDR-Gaming-Database/discussions/139
 Overwatch.exe
-Palia.exe
-PathOfExile_x64.exe
-PathOfExile2_x64.exe
-Persona5ThePhantomX.exe
-pso2.exe
-PinballFX-Win64-Shipping.exe
-PlanBTerraform.exe
+
+# Planet Coaster 2
+# HDR: https://store.steampowered.com/app/2688950/
 PlanetCoaster2.exe
+
+# Planet Zoo
+# HDR: https://store.steampowered.com/app/703080/
 PlanetZoo.exe
-Postal2Redux.exe
-PowerWashSimulator.exe
+
+# PRAGMATA
+# HDR: https://store.steampowered.com/app/3357650/
 Pragmata.exe
-PrisonArchitect2.exe
-PES2016.exe
-PES2017.exe
-PES2018.exe
-PES2019.exe
-ProjectColoredMountains.exe
-ProjectNightmaresCase36HenriettaKedward.exe
-PumpkinJack.exe
-q2rtx.exe
+
+# Project Colored Mountains
+# HDR: https://store.steampowered.com/app/2340980/
+# Executable: https://api.steamcmd.net/v1/info/2340980
+PROJECT COLORED MOUNTAINS.exe
+
+# Ratchet & Clank Rift Apart
+# HDR: https://github.com/KoKlusz/HDR-Gaming-Database/discussions/56
 RiftApart.exe
+
+# REANIMAL
+# HDR: https://store.steampowered.com/app/2129530/
 Reanimal.exe
+
+# Red Dead Redemption 2
+# HDR: https://www.rockstargames.com/newswire/article/398a45525ka319/Red-Dead-Redemption-2-For-PC-Now-Available-to-Pre-Purchase-via-the-Roc?linkId=100000008472056
+# Executable: https://support.rockstargames.com/articles/2qjn6j48MfhpmlfEuaLAZt/red-dead-redemption-2-on-pc-exited-unexpectedly
+RDR2.exe
+
+# Redfall
+# HDR: https://store.steampowered.com/app/1294810/
 Redfall.exe
-redout.exe
-RedoutSpaceAssault.exe
-ResidentEvilRequiem.exe
+
+# Resident Evil 2 (2019)
+# HDR: https://store.steampowered.com/app/883710/
+# Executable: https://www.capcom.co.jp/support/faq/platform_pc_biohazard2_0143209.html
+re2.exe
+
+# Resident Evil 3
+# HDR: https://store.steampowered.com/app/952060/
 re3.exe
-ResonanceAPlagueTaleLegacy.exe
-ReturnToNangrim.exe
+
+# Resident Evil 4 (2023)
+# HDR: https://store.steampowered.com/app/2050650/
+# Executable: https://www.capcom-support.com/hc/en-us/articles/8192772494108-Resident-Evil-4-2023-General-Troubleshooting-Guide-Steam
+re4.exe
+
+# Resident Evil 7 Biohazard
+# HDR: https://store.steampowered.com/app/418370/
+# Executable: https://www.capcom-support.com/hc/en-us/articles/5827833043612-Resident-Evil-7-biohazard-General-Troubleshooting-Guide-Steam
+re7.exe
+
+# Resident Evil Requiem
+# HDR: https://store.steampowered.com/app/3764200/
+# Executable: https://api.steamcmd.net/v1/info/3764200
+re9.exe
+
+# Resident Evil Village
+# HDR: https://store.steampowered.com/app/1196590/
+# Executable: https://www.capcom-support.com/hc/en-us/articles/5598567332508-Resident-Evil-Village-General-Troubleshooting-Guide-Steam
+re8.exe
+
+# Resonance: A Plague Tale Legacy
+# HDR: https://store.steampowered.com/app/2713000/
+# Executable: https://api.steamcmd.net/v1/info/2713000
+Resonance.exe
+
+# Returnal
+# HDR: https://github.com/KoKlusz/HDR-Gaming-Database/discussions/64
 Returnal.exe
-RhythmWorldMasterProject.exe
-ride3.exe
+
+# Riders Republic
+# HDR: https://store.steampowered.com/app/2290180/
 RidersRepublic.exe
-RiseOfTheRonin.exe
+
+# Riven
+# HDR: https://store.steampowered.com/app/1712350/
 Riven.exe
-RolfConnectCoding.exe
-RolfConnectMath.exe
+
+# S.T.A.L.K.E.R. 2: Heart of Chornobyl
+# HDR: https://store.steampowered.com/app/1643320/
 Stalker2-Win64-Shipping.exe
-SaintsRow.exe
-SaintsRowTheThird.exe
-SoTGame.exe
+
+# Sekiro
+# HDR: https://github.com/KoKlusz/HDR-Gaming-Database/discussions/79
 sekiro.exe
-Sensorium.exe
+
+# Senua’s Saga Hellblade II
+# HDR: https://github.com/KoKlusz/HDR-Gaming-Database/discussions/48
 Hellblade2-Win64-Shipping.exe
+
+# Shadow of the Tomb Raider
+# HDR: https://github.com/KoKlusz/HDR-Gaming-Database/discussions/85
 SOTTR.exe
-ShadowWarrior2.exe
-CivilizationVII.exe
+
+# Sid Meier's Civilization VII
+# HDR: https://store.steampowered.com/app/1295660/
+# Executable: https://api.steamcmd.net/v1/info/1295660
+Civ7_Win64_DX12_FinalRelease.exe
+
+# Sid Meier's Civilization VII
+# HDR: https://store.steampowered.com/app/1295660/
+# Executable: https://api.steamcmd.net/v1/info/1295660
+Civ7_Win64_Vulkan_FinalRelease.exe
+
+# Silent Hill f
+# HDR: https://github.com/KoKlusz/HDR-Gaming-Database/discussions/54
 SHProto-Win64-Shipping.exe
-SkateStory.exe
+
+# Skull and Bones
+# HDR: https://store.steampowered.com/app/2853730/
 skullandbones.exe
-SkyGamblersStormRaiders.exe
-SkyChildrenOfTheLight.exe
-SleepAwake.exe
-SlenderTheArrival.exe
-Slitterhead.exe
-SonAndBone.exe
-Soulframe.exe
+
+# Sky: Children of the Light
+# HDR: https://store.steampowered.com/app/2325290/
+# Executable: https://api.steamcmd.net/v1/info/2325290
+Sky.exe
+
+# Slitterhead
+# HDR: https://store.steampowered.com/app/2631250/
+# Executable: https://api.steamcmd.net/v1/info/2631250
+YKS.exe
+
+# South of Midnight
+# HDR: https://store.steampowered.com/app/1934570/
 SouthOfMidnight.exe
-Spine.exe
+
+# Split Fiction
+# HDR: https://store.steampowered.com/app/2001120/
 SplitFiction.exe
-Squadron42.exe
-StarCitizen.exe
-StarOceanTheDivineForce.exe
-starwarsbattlefrontii.exe
+
+# STAR WARS Jedi: Fallen Order™
+# HDR: https://store.steampowered.com/app/1172380/
 SwGame-Win64-Shipping.exe
+
+# STAR WARS Jedi: Survivor™
+# HDR: https://store.steampowered.com/app/1774580/
 JediSurvivor.exe
+
+# Star Wars Outlaws
+# HDR: https://store.steampowered.com/app/2842040/
 Outlaws.exe
-starwarssquadrons.exe
+
+# Steel Seed
+# HDR: https://store.steampowered.com/app/458430/
 SteelSeed.exe
-StellarBlade.exe
+
+# Stellar Blade™
+# HDR: https://store.steampowered.com/app/3489700/
+# Executable: https://api.steamcmd.net/v1/info/3489700
+SB.exe
+
+# Still Wakes the Deep
+# HDR: https://store.steampowered.com/app/1622910/
 StillWakesTheDeep.exe
-StorageHunterSimulator.exe
-StrangeBrigade.exe
-StrangerThanHeaven.exe
-StyxBladesOfGreed.exe
+
+# Suicide Squad Kill the Justice League
+# HDR: https://github.com/KoKlusz/HDR-Gaming-Database/discussions/86
 SuicideSquad_KTJL.exe
-SuperMechaChampions.exe
-SuperStreetTheGame.exe
-SuperEpicTheEntertainmentWar.exe
-SurvivorMercs.exe
+
+# The Last of Us Part II Remastered
+# HDR: https://store.steampowered.com/app/2531310/
+# Executable: https://api.steamcmd.net/v1/info/2531310
+tlou-ii.exe
+
+# The Last of Us Part II Remastered (legacy CPU)
+# HDR: https://store.steampowered.com/app/2531310/
+# Executable: https://api.steamcmd.net/v1/info/2531310
+tlou-ii-l.exe
+
+# INACTIVE REVIEW NOTES (not used for automatic switching)
+# 258 inherited entries were replaced or withheld.
+# ABRISS.exe -- Native PC HDR and/or game executable not independently confirmed in this review; inactive pending evidence.
+# AC2-Win64-Shipping.exe -- Native PC HDR and/or game executable not independently confirmed in this review; inactive pending evidence.
+# ACIII.exe -- Native PC HDR and/or game executable not independently confirmed in this review; inactive pending evidence.
+# ACValhalla.exe -- Native PC HDR and/or game executable not independently confirmed in this review; inactive pending evidence.
+# AdInfinitum.exe -- Native PC HDR and/or game executable not independently confirmed in this review; inactive pending evidence.
+# AgentIntercept.exe -- Native PC HDR and/or game executable not independently confirmed in this review; inactive pending evidence.
+# AgentsOfMayhem.exe -- Native PC HDR and/or game executable not independently confirmed in this review; inactive pending evidence.
+# AlienRogueIncursionEvolvedEdition.exe -- Native PC HDR and/or game executable not independently confirmed in this review; inactive pending evidence.
+# AlienWeaponTestGrounds.exe -- Native PC HDR and/or game executable not independently confirmed in this review; inactive pending evidence.
+# AloneInTheDark.exe -- Native PC HDR and/or game executable not independently confirmed in this review; inactive pending evidence.
+# amtrucks.exe -- Native PC HDR and/or game executable not independently confirmed in this review; inactive pending evidence.
+# Anno117PaxRomana.exe -- Native PC HDR and/or game executable not independently confirmed in this review; inactive pending evidence.
+# Anthem.exe -- Native PC HDR and/or game executable not independently confirmed in this review; inactive pending evidence.
+# Aperion-Win64-Shipping.exe -- Native PC HDR and/or game executable not independently confirmed in this review; inactive pending evidence.
+# Arcadegeddon.exe -- Native PC HDR and/or game executable not independently confirmed in this review; inactive pending evidence.
+# ArcadeParadise.exe -- Native PC HDR and/or game executable not independently confirmed in this review; inactive pending evidence.
+# ArcticAwakening.exe -- Native PC HDR and/or game executable not independently confirmed in this review; inactive pending evidence.
+# ArkAscended.exe -- Native PC HDR and/or game executable not independently confirmed in this review; inactive pending evidence.
+# armoredcore6.exe -- Native PC HDR and/or game executable not independently confirmed in this review; inactive pending evidence.
+# AsDuskFalls.exe -- Native PC HDR and/or game executable not independently confirmed in this review; inactive pending evidence.
+# AssassinsCreedBlackFlagResynced.exe -- Replaced with ACBlackFlag.exe using publisher launch configuration.
+# AtelierReslerianaTheRedAlchemistAndTheWhiteGuardian.exe -- Native PC HDR and/or game executable not independently confirmed in this review; inactive pending evidence.
+# AtomicHeart2.exe -- Native PC HDR and/or game executable not independently confirmed in this review; inactive pending evidence.
+# Avengers.exe -- Native PC HDR and/or game executable not independently confirmed in this review; inactive pending evidence.
+# barony.exe -- Native PC HDR and/or game executable not independently confirmed in this review; inactive pending evidence.
+# BF2042.exe -- Native PC HDR and/or game executable not independently confirmed in this review; inactive pending evidence.
+# BlackOps4.exe -- Native PC HDR and/or game executable not independently confirmed in this review; inactive pending evidence.
+# BlackWidowRecharged.exe -- Native PC HDR and/or game executable not independently confirmed in this review; inactive pending evidence.
+# BladesOfFire.exe -- Native PC HDR and/or game executable not independently confirmed in this review; inactive pending evidence.
+# BleakHaven.exe -- Native PC HDR and/or game executable not independently confirmed in this review; inactive pending evidence.
+# BloodlinesOfPrima.exe -- Native PC HDR and/or game executable not independently confirmed in this review; inactive pending evidence.
+# Borderlands3.exe -- Native PC HDR and/or game executable not independently confirmed in this review; inactive pending evidence.
+# Borderlands4.exe -- Native PC HDR and/or game executable not independently confirmed in this review; inactive pending evidence.
+# Brickadia.exe -- Replaced with BrickadiaSteam-Win64-Shipping.exe using publisher launch configuration.
+# BrickRigs.exe -- Native PC HDR and/or game executable not independently confirmed in this review; inactive pending evidence.
+# Brothers.exe -- Native PC HDR and/or game executable not independently confirmed in this review; inactive pending evidence.
+# BuildingRelationships.exe -- Not released as of review; no confirmed shipping executable. https://store.steampowered.com/app/2666920/
+# BusSimulator21.exe -- Native PC HDR and/or game executable not independently confirmed in this review; inactive pending evidence.
+# Bzzzt.exe -- Native PC HDR and/or game executable not independently confirmed in this review; inactive pending evidence.
+# CaptainBlood.exe -- Native PC HDR and/or game executable not independently confirmed in this review; inactive pending evidence.
+# CaptainGazmanDayOfTheRage.exe -- Native PC HDR and/or game executable not independently confirmed in this review; inactive pending evidence.
+# CatapultQuest.exe -- Native PC HDR and/or game executable not independently confirmed in this review; inactive pending evidence.
+# CelestialCommand.exe -- Native PC HDR and/or game executable not independently confirmed in this review; inactive pending evidence.
+# ChasmalFear.exe -- Native PC HDR and/or game executable not independently confirmed in this review; inactive pending evidence.
+# ChernobylTerroristAttack.exe -- Native PC HDR and/or game executable not independently confirmed in this review; inactive pending evidence.
+# Chess2.exe -- Native PC HDR and/or game executable not independently confirmed in this review; inactive pending evidence.
+# ChinesePaladinSwordAndFairy6.exe -- Native PC HDR and/or game executable not independently confirmed in this review; inactive pending evidence.
+# ChronoOdyssey.exe -- Native PC HDR and/or game executable not independently confirmed in this review; inactive pending evidence.
+# CivilizationVII.exe -- Replaced with Civ7_Win64_DX12_FinalRelease.exe, Civ7_Win64_Vulkan_FinalRelease.exe using publisher launch configuration.
+# ComedyNight.exe -- Native PC HDR and/or game executable not independently confirmed in this review; inactive pending evidence.
+# ContractVille.exe -- Native PC HDR and/or game executable not independently confirmed in this review; inactive pending evidence.
+# ContraRC.exe -- Native PC HDR and/or game executable not independently confirmed in this review; inactive pending evidence.
+# Crackdown3.exe -- Native PC HDR and/or game executable not independently confirmed in this review; inactive pending evidence.
+# CrimsonDesert.exe -- Search matched a different Enhanced edition; exact game executable not confirmed.
+# CronosTheNewDawn.exe -- Replaced with Cronos.exe using publisher launch configuration.
+# CthulhuTheCosmicAbyss.exe -- Native PC HDR and/or game executable not independently confirmed in this review; inactive pending evidence.
+# Cube.exe -- Ambiguous generic executable name; intended game and native HDR not established.
+# D2R.exe -- Native PC HDR and/or game executable not independently confirmed in this review; inactive pending evidence.
+# DarkAndLight.exe -- Native PC HDR and/or game executable not independently confirmed in this review; inactive pending evidence.
+# DawnBreakOrigin.exe -- Native PC HDR and/or game executable not independently confirmed in this review; inactive pending evidence.
+# DeadFormat.exe -- Native PC HDR and/or game executable not independently confirmed in this review; inactive pending evidence.
+# DeadIsland-Win64-Shipping.exe -- Native PC HDR and/or game executable not independently confirmed in this review; inactive pending evidence.
+# Desordre.exe -- Native PC HDR and/or game executable not independently confirmed in this review; inactive pending evidence.
+# Dinkum.exe -- Native PC HDR and/or game executable not independently confirmed in this review; inactive pending evidence.
+# DIRT5.exe -- Native PC HDR and/or game executable not independently confirmed in this review; inactive pending evidence.
+# Disorder.exe -- Native PC HDR and/or game executable not independently confirmed in this review; inactive pending evidence.
+# DistantWorlds2.exe -- Native PC HDR and/or game executable not independently confirmed in this review; inactive pending evidence.
+# DRDR.exe -- Native PC HDR and/or game executable not independently confirmed in this review; inactive pending evidence.
+# DreamEnginesNomadCities.exe -- Native PC HDR and/or game executable not independently confirmed in this review; inactive pending evidence.
+# DualUniverse.exe -- Native PC HDR and/or game executable not independently confirmed in this review; inactive pending evidence.
+# Duskfade.exe -- Native PC HDR and/or game executable not independently confirmed in this review; inactive pending evidence.
+# DyingLightGame_TheBeast.exe -- Replaced with DyingLightGame_TheBeast_x64_rwdi.exe using publisher launch configuration.
+# EchoesOfTheEnd.exe -- Native PC HDR and/or game executable not independently confirmed in this review; inactive pending evidence.
+# EchoesOfTheLiving.exe -- Native PC HDR and/or game executable not independently confirmed in this review; inactive pending evidence.
+# ElementalWar.exe -- Native PC HDR and/or game executable not independently confirmed in this review; inactive pending evidence.
+# Elin.exe -- Native PC HDR and/or game executable not independently confirmed in this review; inactive pending evidence.
+# EoCApp.exe -- Native PC HDR and/or game executable not independently confirmed in this review; inactive pending evidence.
+# EreaDroneSimulator.exe -- Native PC HDR and/or game executable not independently confirmed in this review; inactive pending evidence.
+# ES2-Win64-Shipping.exe -- Native PC HDR and/or game executable not independently confirmed in this review; inactive pending evidence.
+# eurotrucks2.exe -- Native PC HDR and/or game executable not independently confirmed in this review; inactive pending evidence.
+# EvilGenius_vulkan.exe -- Native PC HDR and/or game executable not independently confirmed in this review; inactive pending evidence.
+# Evotinction.exe -- Native PC HDR and/or game executable not independently confirmed in this review; inactive pending evidence.
+# Exodus.exe -- Native PC HDR and/or game executable not independently confirmed in this review; inactive pending evidence.
+# F1_2017.exe -- Native PC HDR and/or game executable not independently confirmed in this review; inactive pending evidence.
+# F1_2018.exe -- Native PC HDR and/or game executable not independently confirmed in this review; inactive pending evidence.
+# F1_2019.exe -- Native PC HDR and/or game executable not independently confirmed in this review; inactive pending evidence.
+# F1_2020.exe -- Native PC HDR and/or game executable not independently confirmed in this review; inactive pending evidence.
+# F1_2021.exe -- Native PC HDR and/or game executable not independently confirmed in this review; inactive pending evidence.
+# F1_22.exe -- Native PC HDR and/or game executable not independently confirmed in this review; inactive pending evidence.
+# F1_23.exe -- Native PC HDR and/or game executable not independently confirmed in this review; inactive pending evidence.
+# FactoryCoinMining.exe -- Native PC HDR and/or game executable not independently confirmed in this review; inactive pending evidence.
+# FantasyLifeITheGirlWhoStealsTime.exe -- Replaced with NFL1.exe using publisher launch configuration.
+# FarCryNewDawn.exe -- Native PC HDR and/or game executable not independently confirmed in this review; inactive pending evidence.
+# FatalFrameIICrimsonButterflyRemake.exe -- Native PC HDR and/or game executable not independently confirmed in this review; inactive pending evidence.
+# FC24.exe -- Native PC HDR and/or game executable not independently confirmed in this review; inactive pending evidence.
+# FC25.exe -- Native PC HDR and/or game executable not independently confirmed in this review; inactive pending evidence.
+# FearTheDarkUnknown.exe -- Native PC HDR and/or game executable not independently confirmed in this review; inactive pending evidence.
+# FeltThatBoxing.exe -- Not released as of review; no confirmed shipping executable. https://store.steampowered.com/app/3763840/
+# Firmament.exe -- Native PC HDR and/or game executable not independently confirmed in this review; inactive pending evidence.
+# FishingNorthAtlantic.exe -- Native PC HDR and/or game executable not independently confirmed in this review; inactive pending evidence.
+# FootballManager2020.exe -- Native PC HDR and/or game executable not independently confirmed in this review; inactive pending evidence.
+# FootballManager2020Touch.exe -- Native PC HDR and/or game executable not independently confirmed in this review; inactive pending evidence.
+# forhonor.exe -- Native PC HDR and/or game executable not independently confirmed in this review; inactive pending evidence.
+# ForzaMotorsport7.exe -- Native PC HDR and/or game executable not independently confirmed in this review; inactive pending evidence.
+# FuckPutin.exe -- Replaced with FP.exe using publisher launch configuration.
+# Fuser.exe -- Native PC HDR and/or game executable not independently confirmed in this review; inactive pending evidence.
+# GartenOfBanban7.exe -- Native PC HDR and/or game executable not independently confirmed in this review; inactive pending evidence.
+# GatesOfHell.exe -- Native PC HDR and/or game executable not independently confirmed in this review; inactive pending evidence.
+# GearsOfWarReloaded.exe -- Replaced with WarGame-Steam-SteamRelease.exe using publisher launch configuration.
+# GeorgieYolkie.exe -- Search matched a different Enhanced edition; exact game executable not confirmed.
+# Ghostbusters.exe -- Native PC HDR and/or game executable not independently confirmed in this review; inactive pending evidence.
+# GoriCuddlyCarnage.exe -- Native PC HDR and/or game executable not independently confirmed in this review; inactive pending evidence.
+# Gravel.exe -- Native PC HDR and/or game executable not independently confirmed in this review; inactive pending evidence.
+# GRID.exe -- Native PC HDR and/or game executable not independently confirmed in this review; inactive pending evidence.
+# GRIDLegends.exe -- Native PC HDR and/or game executable not independently confirmed in this review; inactive pending evidence.
+# GWT.exe -- Native PC HDR and/or game executable not independently confirmed in this review; inactive pending evidence.
+# Gylt.exe -- Native PC HDR and/or game executable not independently confirmed in this review; inactive pending evidence.
+# HaloInfinite.exe -- Native PC HDR and/or game executable not independently confirmed in this review; inactive pending evidence.
+# halowars2.exe -- Native PC HDR and/or game executable not independently confirmed in this review; inactive pending evidence.
+# HaroldHalibut.exe -- Replaced with Harold Halibut.exe using publisher launch configuration.
+# Hedon.exe -- Native PC HDR and/or game executable not independently confirmed in this review; inactive pending evidence.
+# helldivers2.exe -- Native PC HDR and/or game executable not independently confirmed in this review; inactive pending evidence.
+# Hellmart.exe -- Native PC HDR and/or game executable not independently confirmed in this review; inactive pending evidence.
+# HelloNeighbor2.exe -- Native PC HDR and/or game executable not independently confirmed in this review; inactive pending evidence.
+# HITMAN.exe -- Native PC HDR and/or game executable not independently confirmed in this review; inactive pending evidence.
+# HITMAN2.exe -- Native PC HDR and/or game executable not independently confirmed in this review; inactive pending evidence.
+# Homeworld3.exe -- Native PC HDR and/or game executable not independently confirmed in this review; inactive pending evidence.
+# hotwheels.exe -- Native PC HDR and/or game executable not independently confirmed in this review; inactive pending evidence.
+# HouseOfAshes.exe -- Native PC HDR and/or game executable not independently confirmed in this review; inactive pending evidence.
+# HuntGame.exe -- Native PC HDR and/or game executable not independently confirmed in this review; inactive pending evidence.
+# IkumaTheFrozenCompass.exe -- Native PC HDR and/or game executable not independently confirmed in this review; inactive pending evidence.
+# Ill.exe -- Native PC HDR and/or game executable not independently confirmed in this review; inactive pending evidence.
+# ImmortalsOfAveum-Win64-Shipping.exe -- Native PC HDR and/or game executable not independently confirmed in this review; inactive pending evidence.
+# InazumaElevenVictoryRoad.exe -- Replaced with nie.exe using publisher launch configuration.
+# InFluxRedux.exe -- Replaced with InFluxRedux-Win64-Shipping.exe using publisher launch configuration.
+# iRacingSim64DX11.exe -- Native PC HDR and/or game executable not independently confirmed in this review; inactive pending evidence.
+# Ironsight.exe -- Native PC HDR and/or game executable not independently confirmed in this review; inactive pending evidence.
+# JurassicWorldEvolution3.exe -- Replaced with JWE3.exe using publisher launch configuration.
+# Jusant-Win64-Shipping.exe -- Replaced with ASC-Win64-Shipping.exe using publisher launch configuration.
+# JusticeOnline.exe -- Native PC HDR and/or game executable not independently confirmed in this review; inactive pending evidence.
+# KarmaTheDarkWorld.exe -- Replaced with Karma.exe using publisher launch configuration.
+# KF3.exe -- Native PC HDR and/or game executable not independently confirmed in this review; inactive pending evidence.
+# KingdomCome.exe -- Native PC HDR and/or game executable not independently confirmed in this review; inactive pending evidence.
+# KlausVeensTreason.exe -- Native PC HDR and/or game executable not independently confirmed in this review; inactive pending evidence.
+# KnivesOut.exe -- Native PC HDR and/or game executable not independently confirmed in this review; inactive pending evidence.
+# KunitsuGami.exe -- Native PC HDR and/or game executable not independently confirmed in this review; inactive pending evidence.
+# LayersOfFear.exe -- Native PC HDR and/or game executable not independently confirmed in this review; inactive pending evidence.
+# LegoBatmanLegacyOfTheDarkKnight.exe -- Replaced with LEGOBatmanLotDK.exe using publisher launch configuration.
+# LegoHorizonAdventures.exe -- Native PC HDR and/or game executable not independently confirmed in this review; inactive pending evidence.
+# LifeIsStrangeReunion.exe -- Native PC HDR and/or game executable not independently confirmed in this review; inactive pending evidence.
+# LikeADragon8.exe -- Native PC HDR and/or game executable not independently confirmed in this review; inactive pending evidence.
+# LikeADragonGaiden.exe -- Native PC HDR and/or game executable not independently confirmed in this review; inactive pending evidence.
+# LiminalPoint.exe -- Not released as of review; no confirmed shipping executable. https://store.steampowered.com/app/3299920/
+# LittleHope.exe -- Native PC HDR and/or game executable not independently confirmed in this review; inactive pending evidence.
+# LOP-Win64-Shipping.exe -- Native PC HDR and/or game executable not independently confirmed in this review; inactive pending evidence.
+# LordsOfTheFallenII.exe -- Native PC HDR and/or game executable not independently confirmed in this review; inactive pending evidence.
+# LostEmberRekindledEdition.exe -- Native PC HDR and/or game executable not independently confirmed in this review; inactive pending evidence.
+# LostRecords.exe -- Native PC HDR and/or game executable not independently confirmed in this review; inactive pending evidence.
+# LOTF2-Win64-Shipping.exe -- Native PC HDR and/or game executable not independently confirmed in this review; inactive pending evidence.
+# Madden19.exe -- Native PC HDR and/or game executable not independently confirmed in this review; inactive pending evidence.
+# Madden20.exe -- Native PC HDR and/or game executable not independently confirmed in this review; inactive pending evidence.
+# Madden21.exe -- Native PC HDR and/or game executable not independently confirmed in this review; inactive pending evidence.
+# Madden22.exe -- Native PC HDR and/or game executable not independently confirmed in this review; inactive pending evidence.
+# Madden23.exe -- Native PC HDR and/or game executable not independently confirmed in this review; inactive pending evidence.
+# Madden24.exe -- Native PC HDR and/or game executable not independently confirmed in this review; inactive pending evidence.
+# Madden25.exe -- Native PC HDR and/or game executable not independently confirmed in this review; inactive pending evidence.
+# Madden26.exe -- Native PC HDR and/or game executable not independently confirmed in this review; inactive pending evidence.
+# ManOfMedan.exe -- Native PC HDR and/or game executable not independently confirmed in this review; inactive pending evidence.
+# MassEffectAndromeda.exe -- Native PC HDR and/or game executable not independently confirmed in this review; inactive pending evidence.
+# MassEffectLauncher.exe -- Launcher-only trigger removed. ME1 added; ME2/ME3 filenames also match older SDR editions, so use custom entries if needed.
+# MegatonMusashiWired.exe -- Replaced with MEGATON MUSASHI W.exe using publisher launch configuration.
+# MidnightSuns.exe -- Native PC HDR and/or game executable not independently confirmed in this review; inactive pending evidence.
+# MilitaryConflictVietnam.exe -- Native PC HDR and/or game executable not independently confirmed in this review; inactive pending evidence.
+# MindsEye.exe -- Native PC HDR and/or game executable not independently confirmed in this review; inactive pending evidence.
+# Monopoly.exe -- Native PC HDR and/or game executable not independently confirmed in this review; inactive pending evidence.
+# MonsterEnergySupercross.exe -- Native PC HDR and/or game executable not independently confirmed in this review; inactive pending evidence.
+# MonsterEnergySupercross3.exe -- Native PC HDR and/or game executable not independently confirmed in this review; inactive pending evidence.
+# motogp18.exe -- Native PC HDR and/or game executable not independently confirmed in this review; inactive pending evidence.
+# motogp19.exe -- Native PC HDR and/or game executable not independently confirmed in this review; inactive pending evidence.
+# motogp20.exe -- Native PC HDR and/or game executable not independently confirmed in this review; inactive pending evidence.
+# MutantOps.exe -- Native PC HDR and/or game executable not independently confirmed in this review; inactive pending evidence.
+# mxgp19.exe -- Native PC HDR and/or game executable not independently confirmed in this review; inactive pending evidence.
+# MXGPPro.exe -- Native PC HDR and/or game executable not independently confirmed in this review; inactive pending evidence.
+# NASCAR25.exe -- Native PC HDR and/or game executable not independently confirmed in this review; inactive pending evidence.
+# NASCARArcadeRush.exe -- Native PC HDR and/or game executable not independently confirmed in this review; inactive pending evidence.
+# NBA2K26.exe -- Native PC HDR and/or game executable not independently confirmed in this review; inactive pending evidence.
+# NBB.exe -- Native PC HDR and/or game executable not independently confirmed in this review; inactive pending evidence.
+# NewWorld.exe -- Native PC HDR and/or game executable not independently confirmed in this review; inactive pending evidence.
+# nightreign.exe -- Native PC HDR and/or game executable not independently confirmed in this review; inactive pending evidence.
+# NinjaGaiden4.exe -- Replaced with NINJAGAIDEN4-Steam.exe using publisher launch configuration.
+# NuclearNightmare.exe -- Native PC HDR and/or game executable not independently confirmed in this review; inactive pending evidence.
+# ObserverSystemRedux.exe -- Native PC HDR and/or game executable not independently confirmed in this review; inactive pending evidence.
+# OffTheGrid.exe -- Native PC HDR and/or game executable not independently confirmed in this review; inactive pending evidence.
+# Ontos.exe -- Not released as of review; no confirmed shipping executable. https://store.steampowered.com/app/2924520/
+# OsirisNewDawn.exe -- Native PC HDR and/or game executable not independently confirmed in this review; inactive pending evidence.
+# OUTRIDERS-Win64-Shipping.exe -- Native PC HDR and/or game executable not independently confirmed in this review; inactive pending evidence.
+# Palia.exe -- Native PC HDR and/or game executable not independently confirmed in this review; inactive pending evidence.
+# PathOfExile2_x64.exe -- Inherited filename not confirmed; Steam launch basename also occurs in another game/edition. Use a verified custom entry.
+# PathOfExile_x64.exe -- Native PC HDR and/or game executable not independently confirmed in this review; inactive pending evidence.
+# Persona5ThePhantomX.exe -- Native PC HDR and/or game executable not independently confirmed in this review; inactive pending evidence.
+# PES2016.exe -- Native PC HDR and/or game executable not independently confirmed in this review; inactive pending evidence.
+# PES2017.exe -- Native PC HDR and/or game executable not independently confirmed in this review; inactive pending evidence.
+# PES2018.exe -- Native PC HDR and/or game executable not independently confirmed in this review; inactive pending evidence.
+# PES2019.exe -- Native PC HDR and/or game executable not independently confirmed in this review; inactive pending evidence.
+# PGATour.exe -- Native PC HDR and/or game executable not independently confirmed in this review; inactive pending evidence.
+# PinballFX-Win64-Shipping.exe -- Native PC HDR and/or game executable not independently confirmed in this review; inactive pending evidence.
+# PirateYakuzaInHawaii.exe -- Native PC HDR and/or game executable not independently confirmed in this review; inactive pending evidence.
+# PlanBTerraform.exe -- Native PC HDR and/or game executable not independently confirmed in this review; inactive pending evidence.
+# Postal2Redux.exe -- Not released as of review; no confirmed shipping executable. https://store.steampowered.com/app/3839180/
+# PowerWashSimulator.exe -- Native PC HDR and/or game executable not independently confirmed in this review; inactive pending evidence.
+# PrisonArchitect2.exe -- Native PC HDR and/or game executable not independently confirmed in this review; inactive pending evidence.
+# ProjectColoredMountains.exe -- Replaced with PROJECT COLORED MOUNTAINS.exe using publisher launch configuration.
+# ProjectNightmaresCase36HenriettaKedward.exe -- Native PC HDR and/or game executable not independently confirmed in this review; inactive pending evidence.
+# pso2.exe -- Native PC HDR and/or game executable not independently confirmed in this review; inactive pending evidence.
+# PumpkinJack.exe -- Native PC HDR and/or game executable not independently confirmed in this review; inactive pending evidence.
+# q2rtx.exe -- Native PC HDR and/or game executable not independently confirmed in this review; inactive pending evidence.
+# redout.exe -- Native PC HDR and/or game executable not independently confirmed in this review; inactive pending evidence.
+# RedoutSpaceAssault.exe -- Native PC HDR and/or game executable not independently confirmed in this review; inactive pending evidence.
+# RelicCardinal.exe -- Native PC HDR and/or game executable not independently confirmed in this review; inactive pending evidence.
+# ResidentEvilRequiem.exe -- Replaced with re9.exe using publisher launch configuration.
+# ResonanceAPlagueTaleLegacy.exe -- Replaced with Resonance.exe using publisher launch configuration.
+# ReturnToNangrim.exe -- Native PC HDR and/or game executable not independently confirmed in this review; inactive pending evidence.
+# RhythmWorldMasterProject.exe -- Native PC HDR and/or game executable not independently confirmed in this review; inactive pending evidence.
+# ride3.exe -- Native PC HDR and/or game executable not independently confirmed in this review; inactive pending evidence.
+# RiseOfTheRonin.exe -- Native PC HDR and/or game executable not independently confirmed in this review; inactive pending evidence.
+# RolfConnectCoding.exe -- Native PC HDR and/or game executable not independently confirmed in this review; inactive pending evidence.
+# RolfConnectMath.exe -- Native PC HDR and/or game executable not independently confirmed in this review; inactive pending evidence.
+# SaintsRow.exe -- Native PC HDR and/or game executable not independently confirmed in this review; inactive pending evidence.
+# SaintsRowTheThird.exe -- Native PC HDR and/or game executable not independently confirmed in this review; inactive pending evidence.
+# Sensorium.exe -- Native PC HDR and/or game executable not independently confirmed in this review; inactive pending evidence.
+# ShadowOfWar.exe -- Native PC HDR and/or game executable not independently confirmed in this review; inactive pending evidence.
+# ShadowWarrior2.exe -- Native PC HDR and/or game executable not independently confirmed in this review; inactive pending evidence.
+# SkateStory.exe -- Native PC HDR and/or game executable not independently confirmed in this review; inactive pending evidence.
+# SkyChildrenOfTheLight.exe -- Replaced with Sky.exe using publisher launch configuration.
+# SkyGamblersStormRaiders.exe -- Native PC HDR and/or game executable not independently confirmed in this review; inactive pending evidence.
+# SleepAwake.exe -- Native PC HDR and/or game executable not independently confirmed in this review; inactive pending evidence.
+# SlenderTheArrival.exe -- Native PC HDR and/or game executable not independently confirmed in this review; inactive pending evidence.
+# Slitterhead.exe -- Replaced with YKS.exe using publisher launch configuration.
+# SonAndBone.exe -- Native PC HDR and/or game executable not independently confirmed in this review; inactive pending evidence.
+# SoTGame.exe -- Native PC HDR and/or game executable not independently confirmed in this review; inactive pending evidence.
+# Soulframe.exe -- Native PC HDR and/or game executable not independently confirmed in this review; inactive pending evidence.
+# Speedstorm.exe -- Native PC HDR and/or game executable not independently confirmed in this review; inactive pending evidence.
+# Spine.exe -- Native PC HDR and/or game executable not independently confirmed in this review; inactive pending evidence.
+# Squadron42.exe -- Not released as of review; no confirmed shipping executable. https://store.steampowered.com/app/4045720/
+# StarCitizen.exe -- Native PC HDR and/or game executable not independently confirmed in this review; inactive pending evidence.
+# StarOceanTheDivineForce.exe -- Native PC HDR and/or game executable not independently confirmed in this review; inactive pending evidence.
+# starwarsbattlefrontii.exe -- Native PC HDR and/or game executable not independently confirmed in this review; inactive pending evidence.
+# starwarssquadrons.exe -- Native PC HDR and/or game executable not independently confirmed in this review; inactive pending evidence.
+# StellarBlade.exe -- Replaced with SB.exe using publisher launch configuration.
+# StorageHunterSimulator.exe -- Native PC HDR and/or game executable not independently confirmed in this review; inactive pending evidence.
+# StrangeBrigade.exe -- Native PC HDR and/or game executable not independently confirmed in this review; inactive pending evidence.
+# StrangerThanHeaven.exe -- Native PC HDR and/or game executable not independently confirmed in this review; inactive pending evidence.
+# StyxBladesOfGreed.exe -- Native PC HDR and/or game executable not independently confirmed in this review; inactive pending evidence.
+# SuperEpicTheEntertainmentWar.exe -- Native PC HDR and/or game executable not independently confirmed in this review; inactive pending evidence.
+# SuperMechaChampions.exe -- Native PC HDR and/or game executable not independently confirmed in this review; inactive pending evidence.
+# SuperStreetTheGame.exe -- Native PC HDR and/or game executable not independently confirmed in this review; inactive pending evidence.
+# SurvivorMercs.exe -- Native PC HDR and/or game executable not independently confirmed in this review; inactive pending evidence.
+# WRC.exe -- Native PC HDR and/or game executable not independently confirmed in this review; inactive pending evidence.
