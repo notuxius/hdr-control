@@ -48,18 +48,19 @@ namespace LocalHdrMenu {
         public bool ShowActionIcons { get; set; }
         protected override Padding DefaultPadding { get { return surfacePadding; } }
         public void SetSurfacePadding(Padding value) { surfacePadding = value; Padding = value; }
-        public static bool ShouldDeferAnchorClose(ToolStripDropDownCloseReason reason, MouseButtons buttons, Point cursor, Rectangle anchor) {
+        public static bool ShouldDeferAnchorClose(ToolStripDropDownCloseReason reason, Point cursor, Rectangle anchor) {
             return (reason == ToolStripDropDownCloseReason.AppClicked || reason == ToolStripDropDownCloseReason.AppFocusChange)
-                && (buttons & MouseButtons.Left) != 0 && anchor.Contains(cursor);
+                && anchor.Contains(cursor);
         }
         protected override void OnClosing(ToolStripDropDownClosingEventArgs e) {
             base.OnClosing(e);
             Rectangle anchor;
-            // Native menus dismiss on mouse-down, before NotifyIcon.MouseClick.
-            // Keep this one open for a left press on its own icon so the click
-            // handler can close it once, without immediately reopening it.
+            // Explorer can dismiss the popup before delivering the tray event,
+            // even after the physical button is released. Defer dismissal over
+            // our icon to its explicit left/right toggle or middle-click handler.
+            // Escape, item selection and explicit Close() remain unaffected.
             if (ToggleOnAnchorClick && TrayIconPosition.TryGetBounds(AnchorIcon, out anchor)
-                && ShouldDeferAnchorClose(e.CloseReason, Control.MouseButtons, Cursor.Position, anchor))
+                && ShouldDeferAnchorClose(e.CloseReason, Cursor.Position, anchor))
                 e.Cancel = true;
         }
         public static Point CenteredLocation(Point anchor, Size size, Rectangle workArea, int gap) {

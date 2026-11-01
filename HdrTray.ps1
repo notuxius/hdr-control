@@ -109,18 +109,28 @@ function Start-HdrChange([string]$NextAction) {
 }
 
 function Show-HdrControls {
-    if ($script:hdrTray.ControlsMenu.Visible) {
-        $script:hdrTray.ControlsMenu.Close()
+    Show-HdrTrayMenu $script:hdrTray.ControlsMenu $script:hdrTray.Menu
+}
+
+function Show-HdrSettingsMenu {
+    Show-HdrTrayMenu $script:hdrTray.Menu $script:hdrTray.ControlsMenu
+}
+
+function Show-HdrTrayMenu($Menu, $OtherMenu) {
+    if ($Menu.Visible) {
+        $Menu.Close()
         return
     }
-    $script:hdrTray.Menu.Close()
+    $OtherMenu.Close()
     # Reuse NotifyIcon's native popup handling for focus, taskbar placement,
     # keyboard navigation, and dismissal when clicking elsewhere (.NET 4.x).
-    $script:hdrTray.Icon.ContextMenuStrip = $script:hdrTray.ControlsMenu
+    $script:hdrTray.Icon.ContextMenuStrip = $Menu
     try {
         [void]$script:hdrTray.ShowMenuMethod.Invoke($script:hdrTray.Icon, $null)
     } finally {
-        $script:hdrTray.Icon.ContextMenuStrip = $script:hdrTray.Menu
+        # Leave automatic right-click opening disabled; both buttons use this
+        # toggle path, after Windows has delivered their button-up event.
+        $script:hdrTray.Icon.ContextMenuStrip = $null
     }
 }
 
@@ -148,13 +158,14 @@ function Initialize-HdrTray {
     }
     $script:hdrTray.Status.Enabled = $false
     $script:hdrTray.Icon.Icon = $script:hdrTray.UnavailableIcon
-    $script:hdrTray.Icon.ContextMenuStrip = $script:hdrTray.Menu
+    $script:hdrTray.Icon.ContextMenuStrip = $null
     $script:hdrTray.Icon.Text = 'HDR Context Menu'
     $script:hdrTray.Menu.ShowImageMargin = $false
     $script:hdrTray.ControlsMenu.ShowImageMargin = $false
     $script:hdrTray.Menu.AnchorIcon = $script:hdrTray.Icon
     $script:hdrTray.ControlsMenu.AnchorIcon = $script:hdrTray.Icon
     $script:hdrTray.ControlsMenu.ToggleOnAnchorClick = $true
+    $script:hdrTray.Menu.ToggleOnAnchorClick = $true
     $script:hdrTray.Menu.ShowActionIcons = $true
     $script:hdrTray.ControlsMenu.ShowActionIcons = $true
     [void]$script:hdrTray.ControlsMenu.Items.Add($script:hdrTray.Status)
@@ -180,14 +191,17 @@ function Initialize-HdrTray {
     $script:hdrTray.HdrSettings.add_Click({ Open-HdrSettings 'ms-settings:display-hdr' })
     $script:hdrTray.DisplaySettings.add_Click({ Open-HdrSettings 'ms-settings:display' })
     # MouseClick suppresses the second click of a double-click; MouseUp lets
-    # every left click toggle, including fast consecutive clicks.
+    # every left/right click toggle, including fast consecutive clicks.
     $script:hdrTray.Icon.add_MouseUp({
         param($sender, $eventArgs)
         if ($eventArgs.Button -eq [Windows.Forms.MouseButtons]::Left) { Show-HdrControls }
+        elseif ($eventArgs.Button -eq [Windows.Forms.MouseButtons]::Right) { Show-HdrSettingsMenu }
     })
     $script:hdrTray.Icon.add_MouseClick({
         param($sender, $eventArgs)
         if ($eventArgs.Button -eq [Windows.Forms.MouseButtons]::Middle) {
+            $script:hdrTray.ControlsMenu.Close()
+            $script:hdrTray.Menu.Close()
             Start-HdrChange 'Toggle'
         }
     })

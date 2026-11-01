@@ -6,6 +6,7 @@ $installedScript = Join-Path $repo 'HdrSdrMenu.ps1'
 . (Join-Path $repo 'HdrTray.ps1')
 $script:realStartHdrChange = ${function:Start-HdrChange}
 $script:realShowHdrControls = ${function:Show-HdrControls}
+$script:realShowHdrSettings = ${function:Show-HdrSettingsMenu}
 Add-Type @'
 namespace LocalHdrMenu {
     public static class DisplayApi {
@@ -22,6 +23,7 @@ function Sync-HdrMenu($Displays) { $script:syncCount++ }
 function Start-HdrChange([string]$NextAction) { $script:requestedAction = $NextAction }
 function Open-HdrSettings([string]$Uri) { $script:requestedUri = $Uri }
 function Show-HdrControls { $script:controlsOpened++ }
+function Show-HdrSettingsMenu { $script:settingsOpened++ }
 function Assert($Condition, [string]$Message) { if (-not $Condition) { throw $Message } }
 function Display([string]$Name, [bool]$Supported, [bool]$Enabled) {
     [pscustomobject]@{Name=$Name;HdrSupported=$Supported;HdrEnabled=$Enabled}
@@ -30,25 +32,30 @@ $script:syncCount=0
 Initialize-HdrTray
 try {
     Assert ($null -ne $script:hdrTray.ShowMenuMethod) 'Native tray popup method unavailable'
-    Assert ($script:hdrTray.Icon.ContextMenuStrip -eq $script:hdrTray.Menu) 'Right click not bound to settings menu'
+    Assert ($null -eq $script:hdrTray.Icon.ContextMenuStrip) 'Automatic right-click opening must stay disabled'
     Assert (($script:hdrTray.Menu.Items | Where-Object {$_ -is [Windows.Forms.ToolStripMenuItem] -and $_ -isnot [LocalHdrMenu.TrayStatusItem]} | ForEach-Object Text) -join '|' -eq 'HDR settings|Display settings|Exit') 'Right-click menu contains wrong items'
     Assert ($script:hdrTray.Menu.Items.Count -eq 4 -and $script:hdrTray.Menu.Items[2] -is [Windows.Forms.ToolStripSeparator]) 'Right-click menu should contain only two settings shortcuts, a separator, and Exit'
     Assert ($script:hdrTray.Menu.ShowActionIcons) 'Right-click menu icons are missing'
-    Assert ($script:hdrTray.ControlsMenu.ToggleOnAnchorClick -and -not $script:hdrTray.Menu.ToggleOnAnchorClick) 'Only the left menu should defer dismissal for its tray click'
+    Assert ($script:hdrTray.ControlsMenu.ToggleOnAnchorClick -and $script:hdrTray.Menu.ToggleOnAnchorClick) 'Both menus must defer dismissal for their tray click'
     Assert ($script:hdrTray.ControlsMenu.Items.Contains($script:hdrTray.Displays)) 'Displays missing from left-click menu'
     Assert ($script:hdrTray.ControlsMenu.Items.Contains($script:hdrTray.Command)) 'HDR action missing from left-click menu'
     $mouseClick = [Windows.Forms.NotifyIcon].GetMethod('OnMouseClick',[Reflection.BindingFlags]'Instance,NonPublic')
     $mouseUp = [Windows.Forms.NotifyIcon].GetMethod('OnMouseUp',[Reflection.BindingFlags]'Instance,NonPublic')
     $script:controlsOpened=0
+    $script:settingsOpened=0
     foreach ($button in @([Windows.Forms.MouseButtons]::Left,[Windows.Forms.MouseButtons]::Right,[Windows.Forms.MouseButtons]::Middle)) {
         $eventArgs = New-Object Windows.Forms.MouseEventArgs($button,1,0,0,0)
         [void]$mouseClick.Invoke($script:hdrTray.Icon,@($eventArgs.PSObject.BaseObject))
         [void]$mouseUp.Invoke($script:hdrTray.Icon,@($eventArgs.PSObject.BaseObject))
     }
     Assert ($script:controlsOpened -eq 1) 'Controls should open only on left click'
+    Assert ($script:settingsOpened -eq 1) 'Settings should open only on right click'
     $eventArgs = New-Object Windows.Forms.MouseEventArgs([Windows.Forms.MouseButtons]::Left,2,0,0,0)
     [void]$mouseUp.Invoke($script:hdrTray.Icon,@($eventArgs.PSObject.BaseObject))
     Assert ($script:controlsOpened -eq 2) 'Fast second left click should not be swallowed as a double-click'
+    $eventArgs = New-Object Windows.Forms.MouseEventArgs([Windows.Forms.MouseButtons]::Right,2,0,0,0)
+    [void]$mouseUp.Invoke($script:hdrTray.Icon,@($eventArgs.PSObject.BaseObject))
+    Assert ($script:settingsOpened -eq 2) 'Fast second right click should not be swallowed as a double-click'
     Assert ($script:requestedAction -eq 'Toggle') 'Middle click must request a live HDR toggle'
     $script:requestedUri=$null
     $doubleClick = [Windows.Forms.NotifyIcon].GetMethod('OnDoubleClick',[Reflection.BindingFlags]'Instance,NonPublic')
@@ -163,40 +170,43 @@ try {
         foreach ($leftClick in @($true,$false)) {
             Assert ([LocalHdrMenu.TrayIconPosition]::TryGetBounds($script:hdrTray.Icon,[ref]$iconBounds)) 'Tray icon bounds unavailable'
             $anchor = [Drawing.Point]::new($iconBounds.Left+[int]($iconBounds.Width/2),$iconBounds.Top)
-            if ($leftClick) { & $script:realShowHdrControls; $menu=$script:hdrTray.ControlsMenu }
-            else { [void]$script:hdrTray.ShowMenuMethod.Invoke($script:hdrTray.Icon,$null); $menu=$script:hdrTray.Menu }
+            if ($leftClick) { $toggle=$script:realShowHdrControls; $menu=$script:hdrTray.ControlsMenu }
+            else { $toggle=$script:realShowHdrSettings; $menu=$script:hdrTray.Menu }
+            & $toggle
             try {
                 [Windows.Forms.Application]::DoEvents()
                 $graphics=$menu.CreateGraphics()
                 try { $gap=[int][Math]::Round(6*$graphics.DpiY/96) } finally { $graphics.Dispose() }
                 $expected=[LocalHdrMenu.TrayPopupMenu]::CenteredLocation($anchor,$menu.Size,[Windows.Forms.Screen]::FromPoint($anchor).WorkingArea,$gap)
                 Assert ($menu.Visible -and $menu.Location -eq $expected) 'Native tray popup did not stay centered on the icon'
-                if ($leftClick) {
-                    & $script:realShowHdrControls
-                    Assert (-not $menu.Visible) 'Second left click should hide the menu'
-                    & $script:realShowHdrControls
-                    Assert ($menu.Visible) 'Third left click should reopen the menu immediately'
+                    Assert ($null -eq $script:hdrTray.Icon.ContextMenuStrip) 'Showing a menu must not restore automatic right-click opening'
+                    & $toggle
+                    Assert (-not $menu.Visible) 'Second click should hide the menu'
+                    & $toggle
+                    Assert ($menu.Visible) 'Third click should reopen the menu immediately'
                     $menu.Close([Windows.Forms.ToolStripDropDownCloseReason]::Keyboard)
                     Assert (-not $menu.Visible) 'Escape-style dismissal should still close the menu'
-                    & $script:realShowHdrControls
+                    & $toggle
                     Assert ($menu.Visible) 'Click after keyboard dismissal should open the menu'
-                }
             } finally { $menu.Close() }
         }
     }
-    # Native dismissal precedes the tray click: defer only a left-button
+    & $script:realShowHdrControls
+    & $script:realShowHdrSettings
+    Assert ($script:hdrTray.Menu.Visible -and -not $script:hdrTray.ControlsMenu.Visible) 'Right click should switch from controls to settings'
+    & $script:realShowHdrControls
+    Assert ($script:hdrTray.ControlsMenu.Visible -and -not $script:hdrTray.Menu.Visible) 'Left click should switch from settings to controls'
+    $script:hdrTray.ControlsMenu.Close()
+    # Native dismissal precedes the tray event, sometimes after button release:
     # dismissal over this icon, never Escape, menu actions, or outside clicks.
     $bounds=[Drawing.Rectangle]::new(100,100,24,24)
     $inside=[Drawing.Point]::new(112,112)
     foreach($reason in @('AppClicked','AppFocusChange')) {
-        Assert ([LocalHdrMenu.TrayPopupMenu]::ShouldDeferAnchorClose($reason,[Windows.Forms.MouseButtons]::Left,$inside,$bounds)) 'Tray press must wait for the toggle handler'
-        Assert (-not [LocalHdrMenu.TrayPopupMenu]::ShouldDeferAnchorClose($reason,[Windows.Forms.MouseButtons]::Left,[Drawing.Point]::new(50,50),$bounds)) 'Outside clicks must dismiss normally'
-        foreach($button in @('None','Right','Middle')) {
-            Assert (-not [LocalHdrMenu.TrayPopupMenu]::ShouldDeferAnchorClose($reason,[Windows.Forms.MouseButtons]$button,$inside,$bounds)) 'Other buttons must dismiss normally'
-        }
+        Assert ([LocalHdrMenu.TrayPopupMenu]::ShouldDeferAnchorClose($reason,$inside,$bounds)) 'Tray dismissal must wait for the toggle even after button release'
+        Assert (-not [LocalHdrMenu.TrayPopupMenu]::ShouldDeferAnchorClose($reason,[Drawing.Point]::new(50,50),$bounds)) 'Outside clicks must dismiss normally'
     }
     foreach($reason in @('Keyboard','ItemClicked','CloseCalled')) {
-        Assert (-not [LocalHdrMenu.TrayPopupMenu]::ShouldDeferAnchorClose($reason,[Windows.Forms.MouseButtons]::Left,$inside,$bounds)) 'Explicit and keyboard closes must not be blocked'
+        Assert (-not [LocalHdrMenu.TrayPopupMenu]::ShouldDeferAnchorClose($reason,$inside,$bounds)) 'Explicit and keyboard closes must not be blocked'
     }
     # Exercise the real launch validation without starting a process or changing HDR.
     function Start-Process {
