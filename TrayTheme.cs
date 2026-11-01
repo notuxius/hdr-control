@@ -295,7 +295,7 @@ namespace LocalHdrMenu {
                         path.AddArc(1.5f,1.5f,13,13,-45,270);
                         AddStroke(path,8,1.5f,8,7.5f);
                     } else if (item.Name == "HdrStatus" || item.Name == "HdrAction") {
-                        path.AddEllipse(1.5f,1.5f,13,13);
+                        path.AddEllipse(1,1,14,14);
                         if (status == "HDR: Unavailable") {
                             AddStroke(path,5.5f,5.5f,10.5f,10.5f);
                             AddStroke(path,10.5f,5.5f,5.5f,10.5f);
