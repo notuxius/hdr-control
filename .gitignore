@@ -3,3 +3,4 @@ MenuLabel.*.tmp*
 package.commit
 backups/
 *.log
+dist/

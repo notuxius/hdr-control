@@ -1,6 +1,6 @@
 # HDR Context Menu
 
-Current version: **1.0.0**.
+Current version: **1.0.1**.
 
 One desktop right-click action: **Enable HDR** when HDR is off and **Disable HDR** when it is on. With Nilesoft Shell, the action appears directly above **Display settings**.
 
@@ -36,7 +36,7 @@ Open **HDR Context Menu** from the Start menu (or run **Start-Tray.vbs**) to res
 
 ## Install
 
-Download this repository as a ZIP, extract it, and run **Install.cmd**. Accept the Windows administrator prompt using your current account. Installation refreshes Explorer; open folder windows may close. Run the installer again to update.
+Download **HDR-Context-Menu-VERSION-Setup.exe** from the [latest release](https://github.com/notuxius/hdr-context-menu/releases/latest) and run it. Alternatively, download the source ZIP, extract it, and run **Install.cmd**. Accept the Windows administrator prompt using your current account. Installation refreshes Explorer; open folder windows may close. Run the installer again to update.
 
 - Windows 10/11, Windows PowerShell 5.1, Windows Script Host, and an active HDR-capable display are required.
 - Tested on Windows 11 with Nilesoft Shell 1.9.17. No monitor model restriction.
@@ -80,5 +80,9 @@ The public source contains no machine-specific user paths, credentials, or displ
 `VERSION` is the installed and displayed MAJOR.MINOR.PATCH version. Increment the patch for fixes, the minor for backward-compatible features, and the major for incompatible changes. Update checks compare version numbers numerically, never commit IDs, and never offer equal or older versions. Preview releases are excluded.
 
 To publish an update, commit the new `VERSION` and changes, push an annotated `vMAJOR.MINOR.PATCH` tag, and publish a non-draft, non-prerelease GitHub release for that tag. The tag must match `VERSION`; do not move published tags. The updater downloads the repository archive for that exact tag and checks its version and required files before installation. Repository commits without a published release are not offered as app updates.
+
+Publishing a release runs the Windows installer workflow, which attaches a versioned EXE and SHA-256 checksum to that release. The EXE bundles the runtime files and runs the same `Setup.ps1` used by ZIP installations; it preserves the startup preference and adds the Start menu shortcut. The existing uninstall command remains available in the source ZIP. In-app updates continue to use the validated source archive.
+
+To build an installer locally, install Inno Setup 6 and run `powershell.exe -NoProfile -File installer\Build-Installer.ps1 -SourceCommit (git rev-parse HEAD)`. Outputs are written to `dist`. Use `-SourceRoot` to build an installer for an older extracted release without changing its source. Silent installation supports `/VERYSILENT /SUPPRESSMSGBOXES /NORESTART`; add `/NoRestartShell=1` when Explorer must remain running.
 
 Run `powershell.exe -NoProfile -STA -File tests\Update.Tests.ps1` to verify version ordering, archive validation, installation, cancellation, and recovery using isolated files and mocked installers.
