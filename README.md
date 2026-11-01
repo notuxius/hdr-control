@@ -16,7 +16,7 @@ Both menus open centered above the tray icon, shifting inward near screen edges 
 
 **Left-click** the icon to show or hide the controls menu. Each click toggles it, including rapid consecutive clicks. The menu contains:
 
-- With one active display, a top **HDR: Enabled / Disabled / Unavailable** status row. With multiple displays, a **Displays** submenu with each monitor's status replaces that row. With no displays detected, the top row shows **HDR: Unavailable**.
+- With one active display, its name appears above the **HDR: Enabled / Disabled / Unavailable** status row. Both rows are informational and do not highlight on hover. With multiple displays, a **Displays** submenu with each monitor's status replaces those rows. With no displays detected, the top row shows **HDR: Unavailable**.
 - **Enable HDR / Disable HDR**, matching the current state. The action affects all HDR-capable displays. When HDR is unavailable, the header reads **HDR: Unavailable** and the action is hidden. It reappears automatically when HDR becomes available.
 - **Refresh displays** immediately rereads connected displays and updates their status, the tray icon, and the desktop menu. It remains available when HDR is unavailable.
 

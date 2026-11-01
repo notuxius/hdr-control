@@ -18,6 +18,7 @@ function Get-HdrTrayState($Displays) {
         Command = if ($enableNext) { 'Enable HDR' } else { 'Disable HDR' }
         Action = if ($enableNext) { 'On' } else { 'Off' }
         Available = $capable.Count -gt 0
+        DisplayName = if (@($Displays).Count -eq 1) { [string]$Displays[0].Name } else { '' }
         Details = @($Displays | ForEach-Object {
             $mode = if (-not $_.HdrSupported) { 'HDR: Unavailable' }
                 elseif ($_.HdrEnabled) { 'HDR: Enabled' } else { 'HDR: Disabled' }
@@ -43,6 +44,8 @@ function Set-HdrTrayState($State) {
     $script:hdrTray.Command.Enabled = $State.Available -and $null -eq $script:hdrTray.Pending
     $script:hdrTray.ControlsMenu.SuspendLayout()
     $multipleDisplays = $State.Details.Count -gt 1
+    $script:hdrTray.DisplayName.Text = [string]$State.DisplayName
+    $script:hdrTray.DisplayName.Available = $State.Details.Count -eq 1
     $script:hdrTray.Status.Available = -not $multipleDisplays
     $script:hdrTray.Displays.Available = $multipleDisplays
     if (-not $multipleDisplays) { $script:hdrTray.Displays.DropDown.Close() }
@@ -83,7 +86,7 @@ function Update-HdrTray {
         try { Sync-HdrMenu $displays } catch { }
     } catch {
         Set-HdrTrayState ([pscustomobject]@{
-            Status='HDR: Unavailable'; IconState='Unavailable'; Available=$false; Action='On'; Command='Enable HDR'; Details=@()
+            Status='HDR: Unavailable'; IconState='Unavailable'; Available=$false; Action='On'; Command='Enable HDR'; DisplayName=''; Details=@()
         })
     }
 }
@@ -209,6 +212,7 @@ function Initialize-HdrTray {
         ControlsMenu = New-Object LocalHdrMenu.TrayPopupMenu
         ShowMenuMethod = [Windows.Forms.NotifyIcon].GetMethod('ShowContextMenu', [Reflection.BindingFlags]'Instance,NonPublic')
         Status = New-Object LocalHdrMenu.TrayStatusItem
+        DisplayName = New-Object LocalHdrMenu.TrayStatusItem
         Command = New-Object Windows.Forms.ToolStripMenuItem
         CommandSeparator = New-Object Windows.Forms.ToolStripSeparator
         Displays = New-Object Windows.Forms.ToolStripMenuItem('Displays')
@@ -228,6 +232,7 @@ function Initialize-HdrTray {
         DetailsText = $null
     }
     $script:hdrTray.Status.Enabled = $false
+    $script:hdrTray.DisplayName.Enabled = $false
     $script:hdrTray.Icon.Icon = $script:hdrTray.UnavailableIcon
     $script:hdrTray.Icon.ContextMenuStrip = $null
     $script:hdrTray.Icon.Text = 'HDR Context Menu'
@@ -237,6 +242,7 @@ function Initialize-HdrTray {
     $script:hdrTray.ControlsMenu.AnchorIcon = $script:hdrTray.Icon
     $script:hdrTray.Menu.ShowActionIcons = $true
     $script:hdrTray.ControlsMenu.ShowActionIcons = $true
+    [void]$script:hdrTray.ControlsMenu.Items.Add($script:hdrTray.DisplayName)
     [void]$script:hdrTray.ControlsMenu.Items.Add($script:hdrTray.Status)
     [void]$script:hdrTray.ControlsMenu.Items.Add($script:hdrTray.Displays)
     [void]$script:hdrTray.ControlsMenu.Items.Add($script:hdrTray.CommandSeparator)
@@ -252,6 +258,7 @@ function Initialize-HdrTray {
     [void]$script:hdrTray.Menu.Items.Add($script:hdrTray.Exit)
     $script:hdrTray.Command.Name = 'HdrAction'
     $script:hdrTray.Status.Name = 'HdrStatus'
+    $script:hdrTray.DisplayName.Name = 'Displays'
     $script:hdrTray.Displays.Name = 'Displays'
     $script:hdrTray.HdrSettings.Name = 'HdrSettings'
     $script:hdrTray.Exit.Name = 'ExitAction'
