@@ -23,7 +23,7 @@ function Get-HdrTrayState($Displays) {
         Details = @($Displays | ForEach-Object {
             $mode = if (-not $_.HdrSupported) { 'HDR: Unavailable' }
                 elseif ($_.HdrEnabled) { 'HDR: Enabled' } else { 'HDR: Disabled' }
-            $_.Name + ' - ' + $mode
+            [pscustomobject]@{ Name = [string]$_.Name; Status = $mode }
         })
     }
 }
@@ -53,20 +53,28 @@ function Set-HdrTrayState($State) {
     $script:hdrTray.Command.Available = $State.Available
     $script:hdrTray.CommandSeparator.Available = $State.Available
     $script:hdrTray.ControlsMenu.ResumeLayout($true)
-    $details = $State.Details -join "`n"
+    $details = ConvertTo-Json -InputObject @($State.Details) -Compress
     if ($details -ne $script:hdrTray.DetailsText) {
-        foreach ($item in @($script:hdrTray.Displays.DropDownItems)) { $item.Dispose() }
-        $script:hdrTray.Displays.DropDownItems.Clear()
-        foreach ($line in $State.Details) {
-            $item = New-Object LocalHdrMenu.TrayStatusItem
-            $item.Text = $line
-            $item.Name = 'HdrStatus'
-            $item.Tag = $line.Substring($line.LastIndexOf('HDR: ', [StringComparison]::Ordinal))
-            $item.Enabled = $false
-            $item.Padding = $script:hdrTray.Displays.Padding
-            [void]$script:hdrTray.Displays.DropDownItems.Add($item)
-        }
-        $script:hdrTray.DetailsText = $details
+        $script:hdrTray.Displays.DropDown.SuspendLayout()
+        try {
+            foreach ($item in @($script:hdrTray.Displays.DropDownItems)) { $item.Dispose() }
+            $script:hdrTray.Displays.DropDownItems.Clear()
+            foreach ($display in $State.Details) {
+                if ($script:hdrTray.Displays.DropDownItems.Count -gt 0) {
+                    [void]$script:hdrTray.Displays.DropDownItems.Add((New-Object Windows.Forms.ToolStripSeparator))
+                }
+                foreach ($kind in @('Name','Status')) {
+                    $item = New-Object LocalHdrMenu.TrayStatusItem
+                    $item.Text = $display.$kind
+                    $item.Name = if ($kind -eq 'Name') { 'Displays' } else { 'HdrStatus' }
+                    $item.Tag = if ($kind -eq 'Status') { $display.Status } else { $null }
+                    $item.Enabled = $false
+                    $item.Padding = $script:hdrTray.Displays.Padding
+                    [void]$script:hdrTray.Displays.DropDownItems.Add($item)
+                }
+            }
+            $script:hdrTray.DetailsText = $details
+        } finally { $script:hdrTray.Displays.DropDown.ResumeLayout($true) }
     }
     $script:hdrTray.Displays.Enabled = $State.Details.Count -gt 0
     if ($null -ne $script:hdrTray.Pending) { $script:hdrTray.Command.Text = 'Changing HDR...' }

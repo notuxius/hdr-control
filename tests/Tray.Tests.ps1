@@ -107,7 +107,7 @@ try {
     Assert ($script:hdrTray.DisplayName.Available -and $script:hdrTray.DisplayName.Text -eq 'Primary') 'Single display name is missing'
     Assert ($script:hdrTray.ControlsMenu.Items.IndexOf($script:hdrTray.DisplayName) -lt $script:hdrTray.ControlsMenu.Items.IndexOf($script:hdrTray.Status)) 'Display name must appear above HDR status'
     Assert (-not $script:hdrTray.DisplayName.Enabled -and -not $script:hdrTray.DisplayName.CanSelect) 'Display name must not highlight or act as a command'
-    Assert ($script:hdrTray.Displays.DropDownItems[0].Text -eq 'Primary - HDR: Disabled') 'Off labels should be consistent across menus'
+    Assert ($script:hdrTray.Displays.DropDownItems[1].Text -eq 'HDR: Disabled') 'Off labels should be consistent across menus'
     Assert ($script:hdrTray.Icon.Icon.Handle -eq $script:hdrTray.DisabledIcon.Handle) 'SDR should use the yellow monitor icon'
     Assert ($script:hdrTray.Command.Text -eq 'Enable HDR') 'SDR command incorrect'
     $script:hdrTray.Command.PerformClick()
@@ -115,7 +115,7 @@ try {
     [LocalHdrMenu.DisplayApi]::Displays = @((Display 'Primary' $true $true))
     Update-HdrTray
     Assert ($script:hdrTray.Status.Text -eq 'HDR: Enabled') 'HDR status incorrect'
-    Assert ($script:hdrTray.Displays.DropDownItems[0].Text -eq 'Primary - HDR: Enabled') 'On labels should be consistent across menus'
+    Assert ($script:hdrTray.Displays.DropDownItems[1].Text -eq 'HDR: Enabled') 'On labels should be consistent across menus'
     Assert ($script:hdrTray.Icon.Icon.Handle -eq $script:hdrTray.EnabledIcon.Handle) 'HDR should use the green monitor icon'
     Assert ($script:hdrTray.Icon.Text.EndsWith('HDR: Enabled')) 'Tooltip did not update'
     $script:hdrTray.Command.PerformClick()
@@ -127,18 +127,25 @@ try {
     Assert (-not $script:hdrTray.DisplayName.Available) 'Multiple displays should hide the single display heading'
     Assert ($script:hdrTray.Icon.Icon.Handle -eq $script:hdrTray.EnabledIcon.Handle) 'Mixed state should show HDR is enabled on a display'
     Assert ($script:hdrTray.Command.Tag -eq 'On') 'Mixed state should enable all'
-    Assert ($script:hdrTray.Displays.DropDownItems.Count -eq 2) 'Per-display status missing'
+    Assert ($script:hdrTray.Displays.DropDownItems.Count -eq 5) 'Per-display groups missing'
+    $rows = $script:hdrTray.Displays.DropDownItems
+    Assert ($rows[0].Text -eq 'Primary' -and $rows[1].Text -eq 'HDR: Enabled' -and $rows[3].Text -eq 'Secondary' -and $rows[4].Text -eq 'HDR: Disabled') 'Display names must appear above their own HDR status'
+    Assert ($rows[2] -is [Windows.Forms.ToolStripSeparator]) 'Display groups need a divider'
+    foreach ($row in @($rows[0],$rows[1],$rows[3],$rows[4])) {
+        Assert (-not $row.Enabled -and -not $row.CanSelect) 'Display details must not highlight on hover'
+    }
+
     [LocalHdrMenu.DisplayApi]::Displays = @((Display 'SDR only' $false $false))
     Update-HdrTray
     Assert (-not $script:hdrTray.Command.Enabled) 'Unsupported display has an enabled command'
     Assert ($script:hdrTray.Status.Text -eq 'HDR: Unavailable') 'Unavailable caption is incorrect'
     Assert ($script:hdrTray.Status.Available -and -not $script:hdrTray.Displays.Available) 'Returning to one display should restore the top status'
     Assert ($script:hdrTray.DisplayName.Available -and $script:hdrTray.DisplayName.Text -eq 'SDR only') 'Single display heading did not update after reconnect'
-    Assert ($script:hdrTray.Displays.DropDownItems[0].Text -eq 'SDR only - HDR: Unavailable') 'Unavailable labels should be consistent across menus'
+    Assert ($script:hdrTray.Displays.DropDownItems[1].Text -eq 'HDR: Unavailable') 'Unavailable labels should be consistent across menus'
     Assert (-not $script:hdrTray.Command.Available) 'Unsupported display should hide the HDR action'
     Assert (-not $script:hdrTray.CommandSeparator.Available) 'Hidden action should not leave a separator'
     Assert ($script:hdrTray.Icon.Icon.Handle -eq $script:hdrTray.UnavailableIcon.Handle) 'Unsupported display should use the red X icon'
-    Assert ($script:hdrTray.Displays.DropDownItems.Count -eq 1) 'Stale display entry remained'
+    Assert ($script:hdrTray.Displays.DropDownItems.Count -eq 2) 'Stale display entry remained'
     [LocalHdrMenu.DisplayApi]::Displays = @()
     Update-HdrTray
     Assert (-not $script:hdrTray.Displays.Enabled) 'Empty display list is enabled'
@@ -174,8 +181,8 @@ try {
         [LocalHdrMenu.DisplayApi]::Displays = @((Display 'Laptop' $false $false),(Display 'External' $false $false))
         Update-HdrTray
         Assert ($script:hdrTray.Icon.Icon.Handle -eq $script:hdrTray.UnavailableIcon.Handle) 'Reconnect left a yellow tray icon when every display is unavailable'
-        Assert ($script:hdrTray.Displays.DropDownItems.Count -eq 2) 'Reconnect lost display rows'
-        Assert (@($script:hdrTray.Displays.DropDownItems | Where-Object {$_.Text -notlike '*HDR: Unavailable'}).Count -eq 0) 'Reconnect left stale display labels'
+        Assert ($script:hdrTray.Displays.DropDownItems.Count -eq 5) 'Reconnect lost display rows'
+        Assert (@($script:hdrTray.Displays.DropDownItems | Where-Object {$_.Name -eq 'HdrStatus' -and $_.Text -ne 'HDR: Unavailable'}).Count -eq 0) 'Reconnect left stale display labels'
         Assert (-not $script:hdrTray.Command.Available) 'Reconnect left an HDR action for unavailable displays'
         # An unchanged status must still repair a stale icon, not trust a
         # remembered state string while the rendered image is different.
@@ -185,7 +192,7 @@ try {
         [LocalHdrMenu.DisplayApi]::Displays = @((Display 'Laptop' $false $false),(Display 'External' $true $true))
         Update-HdrTray
         Assert ($script:hdrTray.Icon.Icon.Handle -eq $script:hdrTray.EnabledIcon.Handle) 'Reconnected HDR display did not restore the green icon'
-        Assert ($script:hdrTray.Displays.DropDownItems[1].Text -eq 'External - HDR: Enabled') 'Reconnected HDR display label did not recover'
+        Assert ($script:hdrTray.Displays.DropDownItems[4].Text -eq 'HDR: Enabled' -and $script:hdrTray.Displays.DropDownItems[3].Text -eq 'External') 'Reconnected HDR display label did not recover'
         Assert ($script:hdrTray.Command.Available) 'Reconnected HDR display did not restore its action'
     } finally { $script:hdrTray.Displays.DropDown.Close() }
     # Placement covers both screen edges and monitors with negative coordinates.
