@@ -36,6 +36,9 @@ try {
     Assert (($script:hdrTray.Menu.Items | Where-Object {$_ -is [Windows.Forms.ToolStripMenuItem] -and $_ -isnot [LocalHdrMenu.TrayStatusItem]} | ForEach-Object Text) -join '|' -eq 'HDR settings|Display settings|Exit') 'Right-click menu contains wrong items'
     Assert ($script:hdrTray.Menu.Items.Count -eq 4 -and $script:hdrTray.Menu.Items[2] -is [Windows.Forms.ToolStripSeparator]) 'Right-click menu should contain only two settings shortcuts, a separator, and Exit'
     Assert ($script:hdrTray.Menu.ShowActionIcons) 'Right-click menu icons are missing'
+    foreach ($popup in @($script:hdrTray.ControlsMenu,$script:hdrTray.Menu,$script:hdrTray.Displays.DropDown)) {
+        Assert ($popup.TransitionsDisabled) 'Windows should accept disabling popup transitions to avoid squeezed frames'
+    }
     Assert ($script:hdrTray.ControlsMenu.ToggleOnAnchorClick -and $script:hdrTray.Menu.ToggleOnAnchorClick) 'Both menus must defer dismissal for their tray click'
     Assert ($script:hdrTray.ControlsMenu.Items.Contains($script:hdrTray.Displays)) 'Displays missing from left-click menu'
     Assert ($script:hdrTray.ControlsMenu.Items.Contains($script:hdrTray.Command)) 'HDR action missing from left-click menu'

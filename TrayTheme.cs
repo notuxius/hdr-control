@@ -41,11 +41,22 @@ namespace LocalHdrMenu {
         }
     }
     public sealed class TrayPopupMenu : ContextMenuStrip {
+        [DllImport("dwmapi.dll")]
+        static extern int DwmSetWindowAttribute(IntPtr window, int attribute, ref int value, int size);
         Padding surfacePadding = new Padding(6);
         Point popupAnchor;
         public NotifyIcon AnchorIcon { get; set; }
         public bool ToggleOnAnchorClick { get; set; }
         public bool ShowActionIcons { get; set; }
+        public bool TransitionsDisabled { get; private set; }
+        protected override void OnHandleCreated(EventArgs e) {
+            base.OnHandleCreated(e);
+            // These popups are repositioned and reparented by WinForms. DWM's
+            // transition can briefly animate that intermediate geometry on
+            // close. Disable transitions only for our popup windows.
+            int disabled = 1;
+            TransitionsDisabled = DwmSetWindowAttribute(Handle, 3 /* DWMWA_TRANSITIONS_FORCEDISABLED */, ref disabled, sizeof(int)) == 0;
+        }
         protected override Padding DefaultPadding { get { return surfacePadding; } }
         public void SetSurfacePadding(Padding value) { surfacePadding = value; Padding = value; }
         public static bool ShouldDeferAnchorClose(ToolStripDropDownCloseReason reason, Point cursor, Rectangle anchor) {
