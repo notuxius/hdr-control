@@ -251,18 +251,18 @@ namespace LocalHdrMenu {
                     pen.StartCap = pen.EndCap = LineCap.Round;
                     pen.LineJoin = LineJoin.Round;
                     if (item.Name == "HdrSettings") {
-                        // Preserve the two-sparkle motif, with the same outline
-                        // weight as the other menu symbols instead of a solid fill.
-                        // The complete artwork spans 14 DIP (1..15); enlarge
-                        // its geometry rather than scaling the shared pen.
-                        AddSparkle(path,5.75f,5.75f,4.75f);
+                        // Six teeth with a tooth centered at the top and bottom.
+                        // Keep the shared outline weight and 14-DIP artwork bounds.
+                        var gear = new PointF[24];
+                        for (int i = 0; i < gear.Length; i++) {
+                            double angle = i * Math.PI / 12 + Math.PI / 24;
+                            float radius = i % 4 == 1 || i % 4 == 2 ? 7f : 5.7f;
+                            gear[i] = new PointF(8 + radius * (float)Math.Cos(angle), 8 + radius * (float)Math.Sin(angle));
+                        }
+                        path.AddPolygon(gear);
                         g.DrawPath(pen,path);
                         path.Reset();
-                        AddSparkle(path,12.5f,3,1.5f);
-                        // The tiny accent is a single filled mark, like the info dot.
-                        using (var brush = new SolidBrush(color)) g.FillPath(brush,path);
-                        path.Reset();
-                        DrawSettingsGear(g, pen, background);
+                        AddSparkle(path,8,8,2.7f);
                     } else if (item.Name == "DisplaySettings" || item.Name == "Displays") {
                         path.AddRectangle(new RectangleF(1.5f,2.5f,13,9));
                         AddStroke(path,8,11.5f,8,14.5f);
