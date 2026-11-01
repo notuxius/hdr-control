@@ -231,7 +231,7 @@ namespace LocalHdrMenu {
         const float GlyphStroke = 1.5f;
         static void DrawGlyph(Graphics g, ToolStripItem item, int left, Color color) {
             string status = item.Tag as string ?? item.Text;
-            if (item.Name == "HdrAction") status = status == "On" ? "HDR: Enabled" : "HDR: Disabled";
+            if (item.Name == "HdrAction") status = status == "On" || status == "Enable HDR" ? "HDR: Enabled" : "HDR: Disabled";
             if (!Contrast && item.Name == "Startup" && ((ToolStripMenuItem)item).Checked) color = Color.FromArgb(68,195,149);
             bool highlighted = item.Enabled && item.Selected;
             Color background = Contrast ? (highlighted ? SystemColors.Highlight : SystemColors.Menu) : (highlighted ? Hover : Surface);
@@ -251,16 +251,13 @@ namespace LocalHdrMenu {
                     pen.StartCap = pen.EndCap = LineCap.Round;
                     pen.LineJoin = LineJoin.Round;
                     if (item.Name == "HdrSettings") {
-                        // Eight defined teeth surrounding a centered sparkle.
+                        // Six teeth with a tooth centered at the top and bottom.
                         // Keep the shared outline weight and 14-DIP artwork bounds.
-                        var gear = new PointF[64];
-                        float[] angles = {0, .20f, .20f, .30f, .70f, .80f, .80f, 1};
-                        float[] radii = {5.6f, 5.6f, 6.5f, 7, 7, 6.5f, 5.6f, 5.6f};
-                        for (int tooth = 0; tooth < 8; tooth++) {
-                            for (int point = 0; point < 8; point++) {
-                                double angle = (tooth + angles[point]) * Math.PI / 4 - Math.PI / 8;
-                                gear[tooth * 8 + point] = new PointF(8 + radii[point] * (float)Math.Cos(angle), 8 + radii[point] * (float)Math.Sin(angle));
-                            }
+                        var gear = new PointF[24];
+                        for (int i = 0; i < gear.Length; i++) {
+                            double angle = i * Math.PI / 12 + Math.PI / 24;
+                            float radius = i % 4 == 1 || i % 4 == 2 ? 7f : 5.7f;
+                            gear[i] = new PointF(8 + radius * (float)Math.Cos(angle), 8 + radius * (float)Math.Sin(angle));
                         }
                         path.AddPolygon(gear);
                         g.DrawPath(pen,path);
