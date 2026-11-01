@@ -256,8 +256,10 @@ namespace LocalHdrMenu {
                         g.DrawLine(pen,8,12,8,15); g.DrawLine(pen,5,15,11,15);
                         if (item.Name == "DisplaySettings") DrawSettingsGear(g, color, background, true);
                     } else if (item.Name == "RefreshDisplays") {
-                        g.DrawArc(pen,2,2,12,12,35,285);
-                        g.DrawLines(pen,new PointF[] {new PointF(9,1),new PointF(13,2),new PointF(12,6)});
+                        g.DrawArc(pen,2,2,12,12,190,145);
+                        g.DrawLines(pen,new PointF[] {new PointF(10,5.5f),new PointF(13.5f,5.5f),new PointF(13.5f,2)});
+                        g.DrawArc(pen,2,2,12,12,10,145);
+                        g.DrawLines(pen,new PointF[] {new PointF(6,10.5f),new PointF(2.5f,10.5f),new PointF(2.5f,14)});
                     } else if (item.Name == "CheckUpdates") {
                         g.DrawLine(pen,8,1,8,11);
                         g.DrawLines(pen,new PointF[] {new PointF(4,7),new PointF(8,11),new PointF(12,7)});

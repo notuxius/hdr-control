@@ -1,0 +1,30 @@
+name: Attach Windows installer
+on:
+  release:
+    types: [published]
+permissions:
+  contents: write
+jobs:
+  installer:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.release.tag_name }}
+      - name: Validate release version and build
+        shell: powershell
+        env:
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+        run: |
+          $version = (Get-Content VERSION -Raw).Trim()
+          if ($env:RELEASE_TAG -cne ('v' + $version)) { throw 'Release tag does not match VERSION.' }
+          ./installer/Build-Installer.ps1 -SourceCommit (git rev-parse HEAD)
+      - name: Attach installer and checksum
+        shell: powershell
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+        run: |
+          $assets = @(Get-ChildItem dist -File | ForEach-Object FullName)
+          gh release upload $env:RELEASE_TAG @assets --repo $env:GITHUB_REPOSITORY
+          if ($LASTEXITCODE -ne 0) { throw 'Release asset upload failed.' }
