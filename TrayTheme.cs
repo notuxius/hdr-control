@@ -40,13 +40,61 @@ namespace LocalHdrMenu {
             return true;
         }
     }
+    public sealed class TrayPressTracker : IDisposable {
+        delegate IntPtr MouseHook(int code, IntPtr message, IntPtr data);
+        [StructLayout(LayoutKind.Sequential)]
+        struct MouseData { public Point Point; public uint MouseDataValue, Flags, Time; public UIntPtr Extra; }
+        [DllImport("user32.dll", SetLastError=true)]
+        static extern IntPtr SetWindowsHookEx(int kind, MouseHook callback, IntPtr module, uint thread);
+        [DllImport("user32.dll")] static extern bool UnhookWindowsHookEx(IntPtr hook);
+        [DllImport("user32.dll")] static extern IntPtr CallNextHookEx(IntPtr hook, int code, IntPtr message, IntPtr data);
+        [DllImport("kernel32.dll", CharSet=CharSet.Unicode)] static extern IntPtr GetModuleHandle(string name);
+        readonly NotifyIcon icon;
+        readonly ContextMenuStrip controls, settings;
+        readonly MouseHook callback;
+        IntPtr hook;
+        Rectangle anchor;
+        ContextMenuStrip menuAtPress;
+        public bool IsListening { get { return hook != IntPtr.Zero; } }
+        public TrayPressTracker(NotifyIcon icon, ContextMenuStrip controls, ContextMenuStrip settings) {
+            this.icon=icon; this.controls=controls; this.settings=settings;
+            callback=OnMouse;
+            hook=SetWindowsHookEx(14 /* WH_MOUSE_LL */, callback, GetModuleHandle(null), 0);
+            if (hook == IntPtr.Zero) throw new System.ComponentModel.Win32Exception(Marshal.GetLastWin32Error());
+        }
+        public void RefreshAnchor() { TrayIconPosition.TryGetBounds(icon, out anchor); }
+        public void CapturePress(Point point) {
+            // Runs before Explorer changes focus or WinForms dismisses a menu.
+            // Every new press clears any unfinished previous gesture.
+            menuAtPress = anchor.Contains(point) ? (controls.Visible ? controls : settings.Visible ? settings : null) : null;
+        }
+        IntPtr OnMouse(int code, IntPtr message, IntPtr data) {
+            if (code >= 0 && (message.ToInt64()==0x201 || message.ToInt64()==0x204 || message.ToInt64()==0x207)) {
+                var input=(MouseData)Marshal.PtrToStructure(data, typeof(MouseData));
+                CapturePress(input.Point);
+            }
+            // Observe button-down only; never block, synthesize, or retain input.
+            return CallNextHookEx(hook, code, message, data);
+        }
+        public bool ConsumeHide(ContextMenuStrip requested) {
+            bool hide = requested.Visible || menuAtPress == requested;
+            menuAtPress = null;
+            return hide;
+        }
+        public void Dispose() {
+            if (hook != IntPtr.Zero) { UnhookWindowsHookEx(hook); hook=IntPtr.Zero; }
+            menuAtPress=null;
+            GC.KeepAlive(callback);
+        }
+    }
     public sealed class TrayPopupMenu : ContextMenuStrip {
         [DllImport("dwmapi.dll")]
         static extern int DwmSetWindowAttribute(IntPtr window, int attribute, ref int value, int size);
+        [DllImport("user32.dll")]
+        static extern bool SetWindowPos(IntPtr window, IntPtr after, int x, int y, int width, int height, uint flags);
         Padding surfacePadding = new Padding(6);
         Point popupAnchor;
         public NotifyIcon AnchorIcon { get; set; }
-        public bool ToggleOnAnchorClick { get; set; }
         public bool ShowActionIcons { get; set; }
         public bool TransitionsDisabled { get; private set; }
         protected override void OnHandleCreated(EventArgs e) {
@@ -59,20 +107,12 @@ namespace LocalHdrMenu {
         }
         protected override Padding DefaultPadding { get { return surfacePadding; } }
         public void SetSurfacePadding(Padding value) { surfacePadding = value; Padding = value; }
-        public static bool ShouldDeferAnchorClose(ToolStripDropDownCloseReason reason, Point cursor, Rectangle anchor) {
-            return (reason == ToolStripDropDownCloseReason.AppClicked || reason == ToolStripDropDownCloseReason.AppFocusChange)
-                && anchor.Contains(cursor);
-        }
         protected override void OnClosing(ToolStripDropDownClosingEventArgs e) {
             base.OnClosing(e);
-            Rectangle anchor;
-            // Explorer can dismiss the popup before delivering the tray event,
-            // even after the physical button is released. Defer dismissal over
-            // our icon to its explicit left/right toggle or middle-click handler.
-            // Escape, item selection and explicit Close() remain unaffected.
-            if (ToggleOnAnchorClick && TrayIconPosition.TryGetBounds(AnchorIcon, out anchor)
-                && ShouldDeferAnchorClose(e.CloseReason, Cursor.Position, anchor))
-                e.Cancel = true;
+            // Hide the native surface before WinForms resets/reparents it, so
+            // no intermediate collapsed frame is presented during teardown.
+            if (!e.Cancel && IsHandleCreated)
+                SetWindowPos(Handle, IntPtr.Zero, 0,0,0,0, 0x97 /* HIDEWINDOW|NOACTIVATE|NOZORDER|NOMOVE|NOSIZE */);
         }
         public static Point CenteredLocation(Point anchor, Size size, Rectangle workArea, int gap) {
             int x = anchor.X - size.Width / 2;
