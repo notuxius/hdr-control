@@ -21,12 +21,14 @@ namespace LocalHdrMenu {
 }
 '@
 function Sync-HdrMenu($Displays) { $script:syncCount++ }
-function Start-HdrChange([string]$NextAction) { $script:requestedAction = $NextAction }
-function Open-HdrSettings([string]$Uri) { $script:requestedUri = $Uri }
+function Start-HdrChange([string]$NextAction, [string]$DisplayId) { $script:requestedAction = $NextAction; $script:requestedDisplayId = $DisplayId }
 function Show-HdrControls { $script:controlsOpened++ }
 function Show-HdrSettingsMenu { $script:settingsOpened++ }
+function Show-HdrAppSettings { $script:appSettingsOpened++ }
 function Get-HdrStartupEnabled { return $script:testStartup }
 function Set-HdrStartupEnabled([bool]$Enabled) { $script:testStartup = $Enabled }
+function Get-HdrAutomationPreference([string]$Name) { return $Name -eq 'AutomaticHdr' -and $script:testAutomatic }
+function Set-HdrAutomationPreference([string]$Name,[bool]$Enabled) { if ($Name -eq 'AutomaticHdr') { $script:testAutomatic=$Enabled } }
 function Get-HdrInstalledVersion { return '1.0.0' }
 function Start-HdrAppUpdate([string]$Version) { $script:offeredVersion = $Version }
 function Show-HdrMessage([string]$Text, $Buttons = 'OK') { $script:lastMessage = $Text; return $script:messageResponse }
@@ -34,15 +36,21 @@ $script:messageResponse = [Windows.Forms.DialogResult]::No
 $script:testStartup = $true
 function Assert($Condition, [string]$Message) { if (-not $Condition) { throw $Message } }
 function Display([string]$Name, [bool]$Supported, [bool]$Enabled) {
-    [pscustomobject]@{Name=$Name;HdrSupported=$Supported;HdrEnabled=$Enabled}
+    [pscustomobject]@{Name=$Name;HdrSupported=$Supported;HdrEnabled=$Enabled;DisplayId=[Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($Name))}
 }
 $script:syncCount=0
 Initialize-HdrTray
 try {
     Assert ($null -ne $script:hdrTray.ShowMenuMethod) 'Native tray popup method unavailable'
     Assert ($null -eq $script:hdrTray.Icon.ContextMenuStrip) 'Automatic right-click opening must stay disabled'
-    Assert (($script:hdrTray.Menu.Items | Where-Object {$_ -is [Windows.Forms.ToolStripMenuItem] -and $_ -isnot [LocalHdrMenu.TrayStatusItem]} | ForEach-Object Text) -join '|' -eq 'HDR settings|Start with Windows|Check for updates|About|Exit') 'Right-click menu contains wrong items'
+    Assert (-not $script:hdrTray.Automatic.Checked -and $script:hdrTray.Automatic.Text -eq 'Enable auto-switching') 'A disabled preference must offer to enable automatic HDR switching'
+    Assert (($script:hdrTray.Menu.Items | Where-Object {$_ -is [Windows.Forms.ToolStripMenuItem] -and $_ -isnot [LocalHdrMenu.TrayStatusItem]} | ForEach-Object Text) -join '|' -eq 'Settings...|Start with Windows|Check for updates|About|Exit') 'Right-click menu contains wrong items'
     Assert ($script:hdrTray.Menu.Items.Count -eq 7 -and $script:hdrTray.Menu.Items[1] -is [Windows.Forms.ToolStripSeparator] -and $script:hdrTray.Menu.Items[5] -is [Windows.Forms.ToolStripSeparator]) 'Right-click menu groups are incorrect'
+    Assert ($script:hdrTray.Menu.Items[0] -eq $script:hdrTray.AppSettings -and $script:hdrTray.AppSettings.Enabled) 'Settings command must be first in the right-click menu'
+    Assert ($script:hdrTray.Status -is [LocalHdrMenu.TrayStatusItem] -and -not $script:hdrTray.Status.Enabled -and -not $script:hdrTray.Status.CanSelect) 'Combined status must be informational'
+    $script:appSettingsOpened=0
+    $script:hdrTray.AppSettings.PerformClick()
+    Assert ($script:appSettingsOpened -eq 1) 'Settings command must open the shared settings window'
     Assert ($script:hdrTray.Startup.Checked) 'Startup should reflect the stored preference'
     $script:hdrTray.Startup.PerformClick()
     Assert (-not $script:testStartup -and -not $script:hdrTray.Startup.Checked) 'Startup toggle should save disabled without exiting the tray'
@@ -100,62 +108,106 @@ try {
     Assert ($null -eq $script:requestedUri) 'Double click must not unexpectedly open settings'
     [LocalHdrMenu.DisplayApi]::Displays = @((Display 'Primary' $true $false))
     Update-HdrTray
-    Assert ($script:hdrTray.Status.Text -eq 'HDR: Disabled') 'SDR status incorrect'
+    $separator = ' ' + [char]0xB7 + ' Auto: '
+    Assert ($script:hdrTray.Status.Text -eq ('HDR: Disabled' + $separator + 'Paused')) 'SDR status incorrect'
     Assert ($script:hdrTray.Status.Available -and -not $script:hdrTray.Displays.Available) 'One display should show its status without a submenu'
     $visible = @($script:hdrTray.ControlsMenu.Items | Where-Object Available)
-    Assert ($visible[2] -eq $script:hdrTray.Refresh -and $visible[1] -eq $script:hdrTray.Status) 'Refresh must appear directly below HDR status'
+    Assert ($visible[0] -eq $script:hdrTray.DisplayName -and $visible[1] -eq $script:hdrTray.Status -and $visible[2] -eq $script:hdrTray.Refresh) 'One combined status must appear between the display name and Refresh'
+    Assert ($visible[5] -eq $script:hdrTray.Automatic -and $visible[4] -eq $script:hdrTray.Command) 'Auto-enable HDR must appear directly below the HDR action'
     Assert ($script:hdrTray.DisplayName.Available -and $script:hdrTray.DisplayName.Text -eq 'Primary') 'Single display name is missing'
     Assert ($script:hdrTray.ControlsMenu.Items.IndexOf($script:hdrTray.DisplayName) -lt $script:hdrTray.ControlsMenu.Items.IndexOf($script:hdrTray.Status)) 'Display name must appear above HDR status'
     Assert (-not $script:hdrTray.DisplayName.Enabled -and -not $script:hdrTray.DisplayName.CanSelect) 'Display name must not highlight or act as a command'
     Assert ($script:hdrTray.Displays.DropDownItems[1].Text -eq 'HDR: Disabled') 'Off labels should be consistent across menus'
     Assert ($script:hdrTray.Icon.Icon.Handle -eq $script:hdrTray.DisabledIcon.Handle) 'SDR should use the yellow monitor icon'
+    $script:hdrTray.Automatic.PerformClick()
+    Assert ($script:hdrTray.Automatic.Checked -and $script:hdrTray.Icon.Icon.Handle -eq $script:hdrTray.AutoIdleIcon.Handle) 'Checking auto-enable with HDR off must immediately show yellow with play'
+    Assert ($script:hdrTray.Automatic.Text -eq 'Disable auto-switching') 'Enabling automation must immediately offer the disable action'
+    $script:hdrTray.Automatic.PerformClick()
+    Assert ($script:hdrTray.Icon.Icon.Handle -eq $script:hdrTray.DisabledIcon.Handle) 'Unchecking auto-enable with HDR off must immediately show yellow with pause'
+    Assert ($script:hdrTray.Automatic.Text -eq 'Enable auto-switching') 'Disabling automation must immediately offer the enable action'
     Assert ($script:hdrTray.Command.Text -eq 'Enable HDR') 'SDR command incorrect'
     $script:hdrTray.Command.PerformClick()
     Assert ($script:requestedAction -eq 'On') 'Enable did not request On'
     [LocalHdrMenu.DisplayApi]::Displays = @((Display 'Primary' $true $true))
     Update-HdrTray
-    Assert ($script:hdrTray.Status.Text -eq 'HDR: Enabled') 'HDR status incorrect'
+    Assert ($script:hdrTray.Status.Text -eq ('HDR: Enabled' + $separator + 'Paused')) 'HDR status incorrect'
+    foreach ($decision in @('Automatic HDR: idle','Enabled for game.exe','Manual override active')) {
+        Set-HdrDecision $decision
+        $expected = if ($decision -eq 'Automatic HDR: idle') { 'Idle' } else { $decision }
+        Assert ($script:hdrTray.Status.Text -eq ('HDR: Enabled' + $separator + $expected)) 'Automation decision did not refresh the combined label'
+        Assert ($script:hdrTray.Status.Tag -eq 'HDR: Enabled' -and $script:hdrTray.Status.AutomationDecision -eq $decision) 'Combined icon lost its HDR color or automation badge state'
+    }
     Assert ($script:hdrTray.Displays.DropDownItems[1].Text -eq 'HDR: Enabled') 'On labels should be consistent across menus'
     Assert ($script:hdrTray.Icon.Icon.Handle -eq $script:hdrTray.EnabledIcon.Handle) 'HDR should use the green monitor icon'
     Assert ($script:hdrTray.Icon.Text.EndsWith('HDR: Enabled')) 'Tooltip did not update'
+    $script:hdrTray.Automatic.PerformClick()
+    Assert ($script:hdrTray.Icon.Icon.Handle -eq $script:hdrTray.AutoEnabledIcon.Handle -and $script:hdrTray.Icon.Text -like '*auto-enable on*') 'Checking auto-enable with HDR already on must show a play badge without claiming the app enabled it'
+    $script:hdrTray.Automatic.PerformClick()
+    Assert ($script:hdrTray.Icon.Icon.Handle -eq $script:hdrTray.EnabledIcon.Handle) 'Unchecking auto-enable with HDR on must immediately show green with pause'
+    $primary = [LocalHdrMenu.DisplayApi]::Displays[0]
+    $key = Get-HdrMonitorKey $primary
+    $script:hdrTray.Automation.Displays[$key] = @{DisplayId=$primary.DisplayId; Owned=$true; Expected=$true; Released=$false}
+    Set-HdrTrayState (Get-HdrTrayState @($primary))
+    Assert ($script:hdrTray.Icon.Icon.Handle -eq $script:hdrTray.EnabledIcon.Handle -and $script:hdrTray.Icon.Text -like '*auto-enabled*') 'A display enabled by a launch must show pause when automatic HDR is off and identify automation in the tooltip'
+    $script:hdrTray.Automation.Displays.Clear()
     $script:hdrTray.Command.PerformClick()
     Assert ($script:requestedAction -eq 'Off') 'Disable did not request Off'
     [LocalHdrMenu.DisplayApi]::Displays = @((Display 'Primary' $true $true),(Display 'Secondary' $true $false))
     Update-HdrTray
-    Assert ($script:hdrTray.Status.Text -eq 'HDR: Mixed') 'Mixed status incorrect'
-    Assert (-not $script:hdrTray.Status.Available -and $script:hdrTray.Displays.Available) 'Multiple displays should show the submenu instead of the top status'
+    Assert ($script:hdrTray.Status.Text -eq ('HDR: Mixed' + $separator + 'Paused')) 'Mixed status incorrect'
+    Assert ($script:hdrTray.Status.Available -and $script:hdrTray.Displays.Available) 'Multiple displays should show the submenu and combined summary'
     Assert (-not $script:hdrTray.DisplayName.Available) 'Multiple displays should hide the single display heading'
     Assert ($script:hdrTray.Icon.Icon.Handle -eq $script:hdrTray.EnabledIcon.Handle) 'Mixed state should show HDR is enabled on a display'
     Assert ($script:hdrTray.Command.Tag -eq 'On') 'Mixed state should enable all'
-    Assert ($script:hdrTray.Displays.DropDownItems.Count -eq 5) 'Per-display groups missing'
+    Assert ($script:hdrTray.Command.Text -eq 'Enable HDR on all displays') 'Global action must clearly identify its scope'
+    Assert ($script:hdrTray.Displays.DropDownItems.Count -eq 9) 'Per-display groups missing'
     $rows = $script:hdrTray.Displays.DropDownItems
-    Assert ($rows[0].Text -eq 'Primary' -and $rows[1].Text -eq 'HDR: Enabled' -and $rows[3].Text -eq 'Secondary' -and $rows[4].Text -eq 'HDR: Disabled') 'Display names must appear above their own HDR status'
-    Assert ($rows[2] -is [Windows.Forms.ToolStripSeparator]) 'Display groups need a divider'
-    foreach ($row in @($rows[0],$rows[1],$rows[3],$rows[4])) {
+    Assert ($rows[0].Text -eq 'Primary' -and $rows[1].Text -eq 'HDR: Enabled' -and $rows[5].Text -eq 'Secondary' -and $rows[6].Text -eq 'HDR: Disabled') 'Display names must appear above their own HDR status'
+    Assert ($rows[4] -is [Windows.Forms.ToolStripSeparator]) 'Display groups need a divider'
+    foreach ($row in @($rows[0],$rows[1],$rows[5],$rows[6])) {
         Assert (-not $row.Enabled -and -not $row.CanSelect) 'Display details must not highlight on hover'
     }
+    Assert ($rows[2].Text -eq 'Disable HDR' -and $rows[7].Text -eq 'Enable HDR') 'Each display must offer its own action'
+    Assert ($rows[3].Name -eq 'SdrBrightness' -and $rows[8].Name -eq 'SdrBrightness') 'Each capable display needs brightness controls'
+    Assert ($rows[3].Tag -ceq [LocalHdrMenu.DisplayApi]::Displays[0].DisplayId -and $rows[8].Tag -ceq [LocalHdrMenu.DisplayApi]::Displays[1].DisplayId) 'Brightness entries must target their own monitors'
+    $rows[2].PerformClick()
+    Assert ($script:requestedAction -eq 'Off' -and $script:requestedDisplayId -ceq [LocalHdrMenu.DisplayApi]::Displays[0].DisplayId) 'Primary action targeted the wrong display'
+    $rows[7].PerformClick()
+    Assert ($script:requestedAction -eq 'On' -and $script:requestedDisplayId -ceq [LocalHdrMenu.DisplayApi]::Displays[1].DisplayId) 'Secondary action targeted the wrong display'
+    $script:hdrTray.Command.PerformClick()
+    Assert ([string]::IsNullOrEmpty($script:requestedDisplayId)) 'Global action inherited a monitor target'
+    $script:hdrTray.Pending = [pscustomobject]@{HasExited=$false}
+    Set-HdrTrayState (Get-HdrTrayState ([LocalHdrMenu.DisplayApi]::Displays))
+    Assert (-not $rows[2].Enabled -and -not $rows[7].Enabled -and -not $rows[3].Enabled -and -not $rows[8].Enabled) 'Per-monitor commands must disable while a change is pending'
+    $script:hdrTray.Pending = $null
+    Set-HdrTrayState (Get-HdrTrayState ([LocalHdrMenu.DisplayApi]::Displays))
+    Assert ($rows[2].Enabled -and $rows[7].Enabled -and $rows[3].Enabled -and $rows[8].Enabled) 'Unchanged display state must restore commands after a change'
+    $script:hdrTray.UpdateProcess = [pscustomobject]@{HasExited=$false}
+    Set-HdrTrayState (Get-HdrTrayState ([LocalHdrMenu.DisplayApi]::Displays))
+    Assert (-not $rows[2].Enabled -and -not $rows[6].Enabled) 'Per-monitor commands must disable during updates'
+    $script:hdrTray.UpdateProcess = $null
 
     [LocalHdrMenu.DisplayApi]::Displays = @((Display 'SDR only' $false $false))
     Update-HdrTray
     Assert (-not $script:hdrTray.Command.Enabled) 'Unsupported display has an enabled command'
-    Assert ($script:hdrTray.Status.Text -eq 'HDR: Unavailable') 'Unavailable caption is incorrect'
-    Assert ($script:hdrTray.Status.Available -and -not $script:hdrTray.Displays.Available) 'Returning to one display should restore the top status'
-    Assert ($script:hdrTray.DisplayName.Available -and $script:hdrTray.DisplayName.Text -eq 'SDR only') 'Single display heading did not update after reconnect'
+    Assert ($script:hdrTray.Status.Text -eq 'HDR: Unavailable' -and -not $script:hdrTray.Status.AutomationDecision) 'Unavailable HDR must hide the automation label and badge'
+    Assert ($script:hdrTray.Displays.Available -and $script:hdrTray.Displays.Enabled -and -not $script:hdrTray.Status.Available) 'An unsupported monitor must expose Displays in place of the main HDR status'
+    Assert (-not $script:hdrTray.DisplayName.Available -and $script:hdrTray.Displays.DropDownItems[0].Text -eq 'SDR only') 'Show the unsupported monitor name inside Displays'
     Assert ($script:hdrTray.Displays.DropDownItems[1].Text -eq 'HDR: Unavailable') 'Unavailable labels should be consistent across menus'
     Assert (-not $script:hdrTray.Command.Available) 'Unsupported display should hide the HDR action'
-    Assert (-not $script:hdrTray.CommandSeparator.Available) 'Hidden action should not leave a separator'
+    Assert (-not $script:hdrTray.CommandSeparator.Available -and -not $script:hdrTray.Automatic.Available) 'Unavailable HDR must hide the automation toggle and trailing divider'
     Assert ($script:hdrTray.Icon.Icon.Handle -eq $script:hdrTray.UnavailableIcon.Handle) 'Unsupported display should use the red X icon'
     Assert ($script:hdrTray.Displays.DropDownItems.Count -eq 2) 'Stale display entry remained'
     [LocalHdrMenu.DisplayApi]::Displays = @()
     Update-HdrTray
     Assert (-not $script:hdrTray.Displays.Enabled) 'Empty display list is enabled'
-    Assert ($script:hdrTray.Status.Available -and -not $script:hdrTray.Displays.Available) 'No displays should retain the unavailable status without an empty submenu'
+    Assert ($script:hdrTray.Displays.Available -and -not $script:hdrTray.Status.Available) 'Keep the Displays heading when no monitors are connected'
     Assert (-not $script:hdrTray.DisplayName.Available) 'No displays should hide stale display names'
     Assert (-not $script:hdrTray.Command.Available) 'No displays should hide the HDR action'
     Assert ($script:hdrTray.Icon.Icon.Handle -eq $script:hdrTray.UnavailableIcon.Handle) 'No displays should use the red X icon'
     [LocalHdrMenu.DisplayApi]::Fail = $true
     Update-HdrTray
-    Assert ($script:hdrTray.Status.Text -eq 'HDR: Unavailable') 'Transient failure left stale status'
+    Assert ($script:hdrTray.Status.Text -eq 'HDR: Temporarily unreadable' -and -not $script:hdrTray.Automatic.Available) 'Transient failure left stale automation controls'
     Assert (-not $script:hdrTray.Command.Available) 'Unreadable HDR state should hide the action'
     Assert (-not $script:hdrTray.Command.Enabled) 'Transient failure left action enabled'
     Assert ($script:hdrTray.Icon.Icon.Handle -eq $script:hdrTray.UnavailableIcon.Handle) 'Unreadable HDR state should use the red X icon'
@@ -163,10 +215,9 @@ try {
     [LocalHdrMenu.DisplayApi]::Displays = @((Display 'Primary' $true $false))
     Update-HdrTray
     Assert ($script:hdrTray.Command.Enabled) 'Tray failed to recover after display read failure'
-    Assert ($script:hdrTray.Icon.Icon.Handle -eq $script:hdrTray.DisabledIcon.Handle) 'Recovery to HDR off should restore the yellow minus icon'
-    Assert ($script:hdrTray.Command.Available -and $script:hdrTray.CommandSeparator.Available) 'HDR action did not reappear on recovery'
-    $script:hdrTray.HdrSettings.PerformClick()
-    Assert ($script:requestedUri -eq 'ms-settings:display-hdr') 'HDR settings link incorrect'
+    Assert ($script:hdrTray.DisplayName.Available -and $script:hdrTray.Status.Available -and -not $script:hdrTray.Displays.Available) 'One capable monitor must recover its name and main HDR status'
+    Assert ($script:hdrTray.Icon.Icon.Handle -eq $script:hdrTray.DisabledIcon.Handle) 'Recovery to HDR off with auto-enable off should restore the yellow pause icon'
+    Assert ($script:hdrTray.Command.Available -and $script:hdrTray.CommandSeparator.Available -and $script:hdrTray.Automatic.Available -and $script:hdrTray.Status.Text -eq ('HDR: Disabled' + $separator + 'Paused')) 'HDR and automation controls did not reappear on recovery'
     Assert ($script:syncCount -eq 6) 'Desktop label synchronization stopped'
     [LocalHdrMenu.DisplayApi]::Displays = @((Display 'Reconnected' $false $false))
     $script:hdrTray.Refresh.PerformClick()
@@ -182,6 +233,7 @@ try {
         Update-HdrTray
         Assert ($script:hdrTray.Icon.Icon.Handle -eq $script:hdrTray.UnavailableIcon.Handle) 'Reconnect left a yellow tray icon when every display is unavailable'
         Assert ($script:hdrTray.Displays.DropDownItems.Count -eq 5) 'Reconnect lost display rows'
+        Assert ($script:hdrTray.Displays.Available -and -not $script:hdrTray.Status.Available) 'Multiple unsupported monitors must keep unavailable status inside Displays'
         Assert (@($script:hdrTray.Displays.DropDownItems | Where-Object {$_.Name -eq 'HdrStatus' -and $_.Text -ne 'HDR: Unavailable'}).Count -eq 0) 'Reconnect left stale display labels'
         Assert (-not $script:hdrTray.Command.Available) 'Reconnect left an HDR action for unavailable displays'
         # An unchanged status must still repair a stale icon, not trust a
@@ -274,6 +326,18 @@ try {
     }
     $script:hdrTray.ControlsMenu.Close()
     $script:hdrTray.Menu.Close()
+    # Raw input arrives asynchronously: replay a press delivered after dismissal.
+    $captureAt=$script:hdrTray.PressTracker.GetType().GetMethod('CapturePressAt',[Reflection.BindingFlags]'Instance,NonPublic')
+    & $script:realShowHdrControls
+    $pressTime=[Environment]::TickCount
+    $script:hdrTray.ControlsMenu.Close()
+    [void]$captureAt.Invoke($script:hdrTray.PressTracker,@($press,$pressTime))
+    & $script:realShowHdrControls
+    Assert (-not $script:hdrTray.ControlsMenu.Visible) 'Delayed mouse notification reopened the dismissed menu'
+    [void]$captureAt.Invoke($script:hdrTray.PressTracker,@($press,([Environment]::TickCount+100)))
+    & $script:realShowHdrControls
+    Assert $script:hdrTray.ControlsMenu.Visible 'A later tray press was confused with the dismissal'
+    $script:hdrTray.ControlsMenu.Close()
     # A new outside press must invalidate an abandoned icon gesture.
     & $script:realShowHdrControls
     $script:hdrTray.PressTracker.CapturePress($press)
@@ -291,8 +355,24 @@ try {
     }
     $script:launches=0
     try {
+        $first = Display 'Same model' $true $true
+        $second = Display 'Same model' $true $false
+        $second.DisplayId = 'U2Vjb25k'
+        [LocalHdrMenu.DisplayApi]::Displays = @($first,$second)
+        Update-HdrTray
+        $actions = @($script:hdrTray.Displays.DropDownItems | Where-Object Name -eq 'HdrAction')
+        $actions[1].PerformClick()
+        Assert ($script:requestedDisplayId -ceq 'U2Vjb25k') 'Identical monitor names must not affect selection'
+        & $script:realStartHdrChange 'On' $script:requestedDisplayId
+        Assert ($script:launchArguments.EndsWith('-Action On -DisplayId "U2Vjb25k" -FromHelper')) 'Selected identity and helper-origin flag did not reach the display helper'
+        Assert (@($actions | Where-Object Enabled).Count -eq 0) 'Launching a change must immediately disable all monitor commands'
+        & $script:realStartHdrChange 'Off' $first.DisplayId
+        Assert ($script:launches -eq 1) 'Per-display commands must not overlap'
+    } finally { $script:hdrTray.Pending=$null }
+    $script:launches=0
+    try {
         & $script:realStartHdrChange 'Toggle'
-        Assert ($script:launchArguments -match '-Action Toggle$') 'Toggle did not reach the display helper'
+        Assert ($script:launchArguments -match '-Action Toggle -FromHelper$') 'Toggle and helper-origin flag did not reach the display helper'
         Assert (-not $script:hdrTray.Command.Enabled) 'HDR action should be disabled during a change'
         & $script:realStartHdrChange 'Toggle'
         Assert ($script:launches -eq 1) 'Repeated middle clicks must not start overlapping changes'

@@ -21,10 +21,18 @@ If action = "Startup" Then
     action = "Watch"
 End If
 Select Case action
-    Case "Toggle", "On", "Off", "Watch", "Sync"
+    Case "Toggle", "On", "Off", "Watch", "Sync", "Launch"
     Case Else: WScript.Quit 2
 End Select
 command = Chr(34) & powershell & Chr(34) & " -NoLogo -NoProfile -NonInteractive -STA -WindowStyle Hidden -ExecutionPolicy Bypass -File " & Chr(34) & script & Chr(34) & " -Action " & action
+If action = "Launch" Then
+    If WScript.Arguments.Count <> 2 Then WScript.Quit 2
+    Dim pattern
+    Set pattern = New RegExp
+    pattern.Pattern = "^[a-f0-9]{32}$"
+    If Not pattern.Test(WScript.Arguments(1)) Then WScript.Quit 2
+    command = command & " -LaunchId " & WScript.Arguments(1)
+End If
 If action <> "Watch" Then command = command & " -ShowError"
 result = shell.Run(command, 0, True)
 WScript.Quit result

@@ -1,4 +1,4 @@
-# Install for the signed-in user. Nilesoft Shell integration is optional.
+﻿# Install for the signed-in user. Nilesoft Shell integration is optional.
 [CmdletBinding()]
 param(
     [ValidateSet('Install','Uninstall')][string]$Action = 'Install',
@@ -15,8 +15,11 @@ if (-not ([Security.Principal.WindowsPrincipal]::new($identity)).IsInRole([Secur
 }
 $installDir = Join-Path $env:ProgramData 'HdrSdrMenu'
 $runtime = Join-Path $installDir 'HdrSdrMenu.ps1'
+$locationExe = Join-Path $installDir 'HDR Control.exe'
+$locationBuild = $null
 $launcher = Join-Path $installDir 'Toggle-HdrSdr.vbs'
-$shortcutPath = Join-Path ([Environment]::GetFolderPath('Programs')) 'HDR Context Menu.lnk'
+$shortcutPath = Join-Path ([Environment]::GetFolderPath('Programs')) 'HDR Control.lnk'
+$legacyShortcutPath = Join-Path ([Environment]::GetFolderPath('Programs')) 'HDR Context Menu.lnk'
 $shortcutTarget = Join-Path $env:SystemRoot 'System32\wscript.exe'
 $shortcutArguments = '//NoLogo "{0}"' -f (Join-Path $installDir 'Start-Tray.vbs')
 $taskName = 'HdrSdrMenu-Label-' + $env:USERNAME
@@ -50,6 +53,9 @@ function Stop-Helper {
         $_.SessionId -eq $session -and $_.Name -in @('powershell.exe','wscript.exe') -and
         ($_.CommandLine -match $patterns[0] -or $_.CommandLine -match $patterns[1])
     } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
+    Get-Process -Name 'HDR Control' -ErrorAction SilentlyContinue | Where-Object {
+        $_.SessionId -eq $session -and $_.Path -eq $locationExe
+    } | Stop-Process -Force -ErrorAction SilentlyContinue
 }
 function Refresh-Shell {
     if ($hasShell -and -not $NoRestart) {
@@ -67,14 +73,24 @@ try {
         $existingShortcut = $shortcutShell.CreateShortcut($shortcutPath)
         $ownsShortcut = $existingShortcut.TargetPath -eq $shortcutTarget -and $existingShortcut.Arguments -eq $shortcutArguments
         if ($Action -eq 'Install' -and -not $ownsShortcut) {
-            throw 'An unrelated Start menu shortcut already uses HDR Context Menu.lnk.'
+            throw 'An unrelated Start menu shortcut already uses HDR Control.lnk.'
         }
+    }
+    $ownsLegacyShortcut = $false
+    if (Test-Path -LiteralPath $legacyShortcutPath) {
+        $legacyShortcut = $shortcutShell.CreateShortcut($legacyShortcutPath)
+        $ownsLegacyShortcut = $legacyShortcut.TargetPath -eq $shortcutTarget -and $legacyShortcut.Arguments -eq $shortcutArguments
     }
     if ($Action -eq 'Uninstall') {
         Stop-Helper
+        if (Test-Path -LiteralPath $locationExe) { Remove-Item -LiteralPath $locationExe }
         Unregister-ScheduledTask -TaskName $taskName -Confirm:$false -ErrorAction SilentlyContinue
+        Remove-Item -LiteralPath 'HKCU:\Software\Classes\AppUserModelId\Notuxius.HdrControl' -ErrorAction SilentlyContinue
         Remove-ItemProperty -LiteralPath 'HKCU:\Software\HdrContextMenu' -Name StartWithWindows -ErrorAction SilentlyContinue
+        Remove-ItemProperty -LiteralPath 'HKCU:\Software\HdrContextMenu' -Name AutomaticHdr,UseCommunityApps -ErrorAction SilentlyContinue
+        Remove-Item -LiteralPath 'HKCU:\Software\HdrContextMenu\SdrBrightness' -Recurse -ErrorAction SilentlyContinue
         if ($ownsShortcut) { Remove-Item -LiteralPath $shortcutPath }
+        if ($ownsLegacyShortcut) { Remove-Item -LiteralPath $legacyShortcutPath }
         if ($hasShell) {
             $text = [IO.File]::ReadAllText($config)
             $updated = [regex]::Replace($text, '(?m)^\s*import [\x27\x22]imports/hdr-context-menu\.nss[\x27\x22]\s*\r?\n?', '')
@@ -84,21 +100,30 @@ try {
             Remove-Item -LiteralPath $importFile
         }
         if (Test-Path -LiteralPath $menuKey) { Remove-Item -LiteralPath $menuKey -Recurse }
-        foreach ($name in @('HdrSdrMenu.ps1','HdrTray.ps1','TrayTheme.cs','Update-HdrApp.ps1','VERSION','Start-Tray.vbs','Toggle-HdrSdr.vbs','HdrSdrMenu.ico','HdrEnabled.ico','HdrDisabled.ico','HdrUnavailable.ico','HdrEnableAction.ico','HdrDisableAction.ico','HdrUnavailableAction.ico','MenuLabel.txt','MenuIcon.txt','Setup.ps1','hdr-context-menu.nss','package.commit')) {
+        foreach ($name in @('HdrSdrMenu.ps1','HdrTray.ps1','HdrProfiles.ps1','ProfilesUi.cs','ProcessGridTheme.cs','TrayTheme.cs','HdrLocation.cs','Update-HdrApp.ps1','HdrApps.community.txt','VERSION','Start-Tray.vbs','Toggle-HdrSdr.vbs','HdrSdrMenu.ico','HdrEnabled.ico','HdrAutoEnabled.ico','HdrEnabledPaused.ico','HdrAutoIdle.ico','HdrDisabled.ico','HdrUnavailable.ico','HdrEnableAction.ico','HdrDisableAction.ico','HdrUnavailableAction.ico','MenuLabel.txt','MenuIcon.txt','Setup.ps1','hdr-context-menu.nss','package.commit')) {
             $path = Join-Path $installDir $name
             if (Test-Path -LiteralPath $path) { Remove-Item -LiteralPath $path }
         }
         Refresh-Shell
-        Write-Output 'HDR Context Menu removed. Configuration backups were retained.'
+        Write-Output 'HDR Control removed. Configuration backups were retained.'
         return
     }
-    foreach ($name in @('HdrSdrMenu.ps1','HdrTray.ps1','TrayTheme.cs','Update-HdrApp.ps1','VERSION','Start-Tray.vbs','Toggle-HdrSdr.vbs','HdrSdrMenu.ico','HdrEnabled.ico','HdrDisabled.ico','HdrUnavailable.ico','HdrEnableAction.ico','HdrDisableAction.ico','HdrUnavailableAction.ico','hdr-context-menu.nss')) {
+    . (Join-Path $PSScriptRoot 'Update-HdrApp.ps1') -FunctionsOnly
+    Restore-HdrCommunityBundle $PSScriptRoot
+    foreach ($name in @('HdrSdrMenu.ps1','HdrTray.ps1','HdrProfiles.ps1','ProfilesUi.cs','ProcessGridTheme.cs','TrayTheme.cs','HdrLocation.cs','Update-HdrApp.ps1','HdrApps.community.txt','VERSION','Start-Tray.vbs','Toggle-HdrSdr.vbs','HdrSdrMenu.ico','HdrEnabled.ico','HdrAutoEnabled.ico','HdrEnabledPaused.ico','HdrAutoIdle.ico','HdrDisabled.ico','HdrUnavailable.ico','HdrEnableAction.ico','HdrDisableAction.ico','HdrUnavailableAction.ico','hdr-context-menu.nss')) {
         if (-not (Test-Path -LiteralPath (Join-Path $PSScriptRoot $name))) { throw "Package file missing: $name" }
     }
     if ($installDir.Contains("'") -or $env:SystemRoot.Contains("'")) { throw 'Installation paths cannot contain apostrophes.' }
     if ((Test-Path -LiteralPath $importFile) -and -not [IO.File]::ReadAllText($importFile).StartsWith('// HDR Context Menu - managed by Setup.ps1')) {
         throw 'An unrelated Nilesoft import already uses hdr-context-menu.nss.'
     }
+    # Windows attributes desktop location access to the executable that requests it.
+    $buildDir = Join-Path ([IO.Path]::GetTempPath()) ('hdr-location-' + [Guid]::NewGuid().ToString('N'))
+    New-Item -ItemType Directory -Path $buildDir | Out-Null
+    $locationBuild = Join-Path $buildDir 'HDR Control.exe'
+    $compiler = Join-Path $env:SystemRoot 'Microsoft.NET\Framework\v4.0.30319\csc.exe'
+    & $compiler /nologo /target:winexe /optimize+ /reference:System.Device.dll "/out:$locationBuild" ("/win32icon:" + (Join-Path $PSScriptRoot 'HdrSdrMenu.ico')) (Join-Path $PSScriptRoot 'HdrLocation.cs')
+    if ($LASTEXITCODE -ne 0) { throw 'Could not build the HDR Control location reader.' }
     New-Item -ItemType Directory -Path $installDir -Force | Out-Null
     # The limited logon helper needs to update its state file after elevated setup.
     $acl = Get-Acl -LiteralPath $installDir
@@ -106,7 +131,8 @@ try {
     $acl.SetAccessRule($rule)
     Set-Acl -LiteralPath $installDir -AclObject $acl
     Stop-Helper
-    foreach ($name in @('HdrSdrMenu.ps1','HdrTray.ps1','TrayTheme.cs','Update-HdrApp.ps1','VERSION','Start-Tray.vbs','Toggle-HdrSdr.vbs','HdrSdrMenu.ico','HdrEnabled.ico','HdrDisabled.ico','HdrUnavailable.ico','HdrEnableAction.ico','HdrDisableAction.ico','HdrUnavailableAction.ico','Setup.ps1','hdr-context-menu.nss','package.commit')) {
+    Copy-Item -LiteralPath $locationBuild -Destination $locationExe -Force
+    foreach ($name in @('HdrSdrMenu.ps1','HdrTray.ps1','HdrProfiles.ps1','ProfilesUi.cs','ProcessGridTheme.cs','TrayTheme.cs','HdrLocation.cs','Update-HdrApp.ps1','HdrApps.community.txt','VERSION','Start-Tray.vbs','Toggle-HdrSdr.vbs','HdrSdrMenu.ico','HdrEnabled.ico','HdrAutoEnabled.ico','HdrEnabledPaused.ico','HdrAutoIdle.ico','HdrDisabled.ico','HdrUnavailable.ico','HdrEnableAction.ico','HdrDisableAction.ico','HdrUnavailableAction.ico','Setup.ps1','hdr-context-menu.nss','package.commit')) {
         $source = Join-Path $PSScriptRoot $name
         $destination = Join-Path $installDir $name
         if ((Test-Path -LiteralPath $source) -and [IO.Path]::GetFullPath($source) -ne [IO.Path]::GetFullPath($destination)) {
@@ -157,19 +183,25 @@ try {
     $shortcut.Arguments = $shortcutArguments
     $shortcut.WorkingDirectory = $installDir
     $shortcut.IconLocation = (Join-Path $installDir 'HdrEnabled.ico') + ',0'
-    $shortcut.Description = 'Start the HDR tray icon and desktop menu helper'
+    $shortcut.Description = 'HDR Control - HDR controls, automatic switching, and SDR brightness'
     $shortcut.WindowStyle = 7
     $shortcut.Save()
+    if ($ownsLegacyShortcut) { Remove-Item -LiteralPath $legacyShortcutPath }
     # Pass a one-time argument through Task Scheduler so explicit installation
     # starts the limited-user tray even when the saved logon preference is off.
     $scheduler = New-Object -ComObject Schedule.Service
     $scheduler.Connect()
     [void]$scheduler.GetFolder('\').GetTask($taskName).Run('LaunchNow')
     Refresh-Shell
-    Write-Output 'HDR Context Menu installed. Reopen the desktop right-click menu.'
+    Write-Output 'HDR Control installed. Open HDR Control from the Start menu or use the tray icon.'
 } catch {
     # If an upgrade fails, resume the existing helper where possible.
     if (Test-Path -LiteralPath $runtime) { Start-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue }
     Write-Error $_ -ErrorAction Continue
     exit 1
+} finally {
+    if ($locationBuild) {
+        if (Test-Path -LiteralPath $locationBuild) { Remove-Item -LiteralPath $locationBuild -Force }
+        [IO.Directory]::Delete($buildDir)
+    }
 }

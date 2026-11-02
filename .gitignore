@@ -1,6 +1,16 @@
 MenuLabel.txt
+HdrApps.custom.txt
+HdrApps.detected.json
+HdrApps.detected.json.*.tmp
+HdrApps.community.cache.txt
+HdrApps.community.cache.txt.*.tmp
 MenuLabel.*.tmp*
 package.commit
 backups/
 *.log
 dist/
+
+HdrProfiles.json
+HdrProfiles.json.*.tmp
+HdrDiagnostics.log.previous
+requests-*/

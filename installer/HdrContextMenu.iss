@@ -11,19 +11,19 @@
 
 [Setup]
 AppId=HdrContextMenu.Bootstrap
-AppName=HDR Context Menu
+AppName=HDR Control
 AppVersion={#AppVersion}
 AppPublisher=notuxius
-AppPublisherURL=https://github.com/notuxius/hdr-context-menu
-AppSupportURL=https://github.com/notuxius/hdr-context-menu/issues
-AppUpdatesURL=https://github.com/notuxius/hdr-context-menu/releases
+AppPublisherURL=https://github.com/notuxius/hdr-control
+AppSupportURL=https://github.com/notuxius/hdr-control/issues
+AppUpdatesURL=https://github.com/notuxius/hdr-control/releases
 VersionInfoVersion={#AppVersion}.0
 VersionInfoProductVersion={#AppVersion}.0
 VersionInfoProductTextVersion={#AppVersion}
-VersionInfoDescription=HDR Context Menu installer
+VersionInfoDescription=HDR Control installer
 SetupIconFile={#SourceRoot}\HdrEnabled.ico
 OutputDir={#BuildOutput}
-OutputBaseFilename=HDR-Context-Menu-{#AppVersion}-Setup
+OutputBaseFilename=HDR-Control-{#AppVersion}-Setup
 WizardStyle=modern
 DisableWelcomePage=no
 DisableDirPage=yes
@@ -59,7 +59,7 @@ begin
     Parameters := Parameters + ' -NoRestart';
   if not Exec(ExpandConstant('{sys}\WindowsPowerShell\v1.0\powershell.exe'), Parameters,
     ExpandConstant('{tmp}\HdrContextMenu'), SW_HIDE, ewWaitUntilTerminated, ResultCode) then
-    Result := 'Windows could not start the HDR Context Menu installer.';
+    Result := 'Windows could not start the HDR Control installer.';
   if (Result = '') and (ResultCode <> 0) then
-    Result := 'HDR Context Menu could not be installed. Setup returned error ' + IntToStr(ResultCode) + '.';
+    Result := 'HDR Control could not be installed. Setup returned error ' + IntToStr(ResultCode) + '.';
 end;

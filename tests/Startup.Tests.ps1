@@ -8,12 +8,18 @@ New-Item -ItemType Directory -Path $temp | Out-Null
 try {
     $source = [IO.File]::ReadAllText((Join-Path $repo 'HdrTray.ps1'))
     $ast = [Management.Automation.Language.Parser]::ParseInput($source,[ref]$null,[ref]$null)
-    foreach ($name in @('Get-HdrStartupEnabled','Set-HdrStartupEnabled')) {
+    foreach ($name in @('Get-HdrStartupEnabled','Set-HdrStartupEnabled','Set-HdrAutomationPreference')) {
         $definition = $ast.Find({param($node) $node -is [Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -eq $name},$true)
         . ([scriptblock]::Create($definition.Extent.Text.Replace('HKCU:\Software\HdrContextMenu',$key)))
     }
     if (-not (Get-HdrStartupEnabled)) { throw 'Missing startup preference should default to enabled' }
+    # Toggling the community list creates the settings key before the user has
+    # ever saved StartWithWindows. An existing key with a missing value differs
+    # from an absent key in Windows PowerShell's registry provider.
+    Set-HdrAutomationPreference 'UseCommunityApps' $false
+    if (-not (Get-HdrStartupEnabled)) { throw 'Community-list toggle must not break the default startup preference' }
     Set-HdrStartupEnabled $false
+    Set-HdrAutomationPreference 'UseCommunityApps' $true
     if (Get-HdrStartupEnabled) { throw 'Disabled preference was not persisted' }
     $vbs = [IO.File]::ReadAllText((Join-Path $repo 'Toggle-HdrSdr.vbs')).Replace('HKCU\Software\HdrContextMenu\',($key.Replace('HKCU:','HKCU')+'\'))
     $launcher = Join-Path $temp 'Toggle-HdrSdr.vbs'
@@ -32,10 +38,13 @@ try {
     Run-Launcher 'Startup "LaunchNow"' $true
     Run-Launcher 'Watch' $true
     Set-HdrStartupEnabled $true
+    Set-HdrAutomationPreference 'UseCommunityApps' $false
+    Set-HdrStartupEnabled $true
+    if ((Get-ItemPropertyValue -LiteralPath $key -Name UseCommunityApps) -ne 0) { throw 'Startup toggle erased the community-list preference' }
     Run-Launcher 'Startup' $true
-    'PASS: startup defaults, persistence, disabled logon, explicit installer launch, and manual launch.'
+    'PASS: startup defaults with missing and partial settings, community-list toggles, persistence, disabled logon, explicit installer launch, and manual launch.'
 } finally {
-    if (Test-Path -LiteralPath $key) { Remove-ItemProperty -LiteralPath $key -Name StartWithWindows; Remove-Item -LiteralPath $key }
+    if (Test-Path -LiteralPath $key) { Remove-Item -LiteralPath $key }
     # Delete only the known test files, then its empty temporary directory.
     foreach ($name in @('Toggle-HdrSdr.vbs','HdrSdrMenu.ps1','result.txt')) {
         $path = Join-Path $temp $name
