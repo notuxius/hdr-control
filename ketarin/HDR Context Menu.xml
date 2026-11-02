@@ -1,9 +1,9 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="utf-8"?>
 <Jobs xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
   <ApplicationJob Guid="dd7b23c4-2040-4529-810c-bcf2c59e3594">
-    <WebsiteUrl>https://github.com/notuxius/hdr-context-menu</WebsiteUrl>
+    <WebsiteUrl>https://github.com/notuxius/hdr-control</WebsiteUrl>
     <UserAgent>HdrContextMenu-Ketarin</UserAgent>
-    <UserNotes>One Enable HDR / Disable HDR desktop action that follows the current display state. With Nilesoft Shell, appears above Display settings. Update downloads only; choose Install to apply the downloaded version. Windows 10/11 and an HDR-capable display required.</UserNotes>
+    <UserNotes>Control HDR per display, enable it for selected games, and schedule SDR brightness. Update downloads and prepares the latest main commit. Choose Install to apply the prepared version. Requires Windows 10 or 11 and an HDR-capable display.</UserNotes>
     <LastFileSize>0</LastFileSize>
     <LastFileDate xsi:nil="true" />
     <IgnoreFileInformation>false</IgnoreFileInformation>
@@ -35,7 +35,7 @@
             <RegexRightToLeft>false</RegexRightToLeft>
             <VariableType>RegularExpression</VariableType>
             <Regex>"sha"\s*:\s*"([0-9a-f]{40})"</Regex>
-            <Url>https://api.github.com/repos/notuxius/hdr-context-menu/commits/main</Url>
+            <Url>https://api.github.com/repos/notuxius/hdr-control/commits/main</Url>
             <Name>version</Name>
           </UrlVariable>
         </value>
@@ -116,7 +116,7 @@ function Remove-OldDownloads {
             try {
                 $backup = [IO.Compression.ZipFile]::OpenRead($full)
                 $backupRoots = @($backup.Entries | ForEach-Object { ($_.FullName -split '/')[0] } | Select-Object -Unique)
-                $ownedArchive = $backupRoots.Count -eq 1 -and $backupRoots[0] -match '^hdr-context-menu-[0-9a-f]{40}$'
+                $ownedArchive = $backupRoots.Count -eq 1 -and $backupRoots[0] -match '^hdr-(?:control|context-menu)-[0-9a-f]{40}$'
             } catch { } finally { if ($null -ne $backup) { $backup.Dispose() } }
             if ($ownedArchive) { Remove-Item -LiteralPath $full -Force }
         }
@@ -135,21 +135,21 @@ try {
     try {
         $downloadRoot = @($probe.Entries | ForEach-Object { ($_.FullName -split '/')[0] } | Select-Object -Unique)
     } finally { $probe.Dispose() }
-    if ($downloadRoot.Count -ne 1 -or $downloadRoot[0] -ne ('hdr-context-menu-' + $expectedCommit)) {
+    if ($downloadRoot.Count -ne 1 -or $downloadRoot[0] -cnotmatch ('^hdr-(?:control|context-menu)-' + $expectedCommit + '$')) {
         # Ketarin may resolve the download URL before refreshing its version indicator.
         # Fetch the exact detected commit if main changed between those two requests.
         $activeArchive = Join-Path $stage 'detected-commit.zip'
         $client = New-Object Net.WebClient
         try {
             $client.Headers['User-Agent'] = 'HdrContextMenu-Ketarin'
-            $client.DownloadFile(('https://codeload.github.com/notuxius/hdr-context-menu/zip/' + $expectedCommit), $activeArchive)
+            $client.DownloadFile(('https://codeload.github.com/notuxius/hdr-control/zip/' + $expectedCommit), $activeArchive)
         } finally { $client.Dispose() }
     }
     $zip = [IO.Compression.ZipFile]::OpenRead($activeArchive)
     try {
         $roots = @($zip.Entries | ForEach-Object { ($_.FullName -split '/')[0] } | Select-Object -Unique)
-        if ($roots.Count -ne 1 -or $roots[0] -notmatch '^hdr-context-menu-([0-9a-f]{40})$') {
-            throw 'The download is not a commit archive from hdr-context-menu.'
+        if ($roots.Count -ne 1 -or $roots[0] -notmatch '^hdr-(?:control|context-menu)-([0-9a-f]{40})$') {
+            throw 'The download is not a commit archive from hdr-control.'
         }
         $commit = $Matches[1]
         if ($commit -ne $expectedCommit) { throw 'The downloaded archive does not match the detected GitHub commit.' }
@@ -164,7 +164,7 @@ try {
     } finally { $zip.Dispose() }
     [IO.Compression.ZipFile]::ExtractToDirectory($activeArchive, $stage)
     $source = Join-Path $stage $roots[0]
-    foreach ($required in @('Setup.ps1','HdrSdrMenu.ps1','HdrTray.ps1','TrayTheme.cs','Start-Tray.vbs','Toggle-HdrSdr.vbs','HdrSdrMenu.ico','HdrEnabled.ico','HdrDisabled.ico','HdrUnavailable.ico','HdrEnableAction.ico','HdrDisableAction.ico','HdrUnavailableAction.ico','hdr-context-menu.nss')) {
+    foreach ($required in @('Setup.ps1','HdrSdrMenu.ps1','HdrTray.ps1','HdrProfiles.ps1','ProfilesUi.cs','ProcessGridTheme.cs','TrayTheme.cs','HdrLocation.cs','Update-HdrApp.ps1','HdrApps.community.txt','VERSION','Start-Tray.vbs','Toggle-HdrSdr.vbs','HdrSdrMenu.ico','HdrEnabled.ico','HdrAutoEnabled.ico','HdrEnabledPaused.ico','HdrAutoIdle.ico','HdrDisabled.ico','HdrUnavailable.ico','HdrEnableAction.ico','HdrDisableAction.ico','HdrUnavailableAction.ico','hdr-context-menu.nss')) {
         if (-not (Test-Path -LiteralPath (Join-Path $source $required) -PathType Leaf)) {
             throw ('The package is incomplete: ' + $required)
         }
@@ -199,7 +199,7 @@ try {
     <FileHippoId />
     <LastUpdated xsi:nil="true" />
     <TargetPath>..\_Tweaks\HDR Context Menu\_.zip</TargetPath>
-    <FixedDownloadUrl>https://codeload.github.com/notuxius/hdr-context-menu/zip/{version}</FixedDownloadUrl>
-    <Name>HDR Context Menu</Name>
+    <FixedDownloadUrl>https://codeload.github.com/notuxius/hdr-control/zip/{version}</FixedDownloadUrl>
+    <Name>HDR Control</Name>
   </ApplicationJob>
 </Jobs>

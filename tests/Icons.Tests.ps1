@@ -2,7 +2,7 @@
 $ErrorActionPreference='Stop'
 Add-Type -AssemblyName System.Drawing
 $repo=Split-Path $PSScriptRoot
-$expected=@{HdrEnabled=1;HdrDisabled=2;HdrUnavailable=0;HdrEnableAction=1;HdrDisableAction=2;HdrUnavailableAction=0}
+$expected=@{HdrEnabled=1;HdrEnabledPaused=1;HdrAutoEnabled=1;HdrAutoIdle=2;HdrDisabled=2;HdrUnavailable=0;HdrEnableAction=1;HdrDisableAction=2;HdrUnavailableAction=0}
 foreach($name in $expected.Keys) {
     foreach($size in @(16,20,24,32,48,64)) {
         $icon=[Drawing.Icon]::new((Join-Path $repo ($name+'.ico')),[Drawing.Size]::new($size,$size))
@@ -11,6 +11,15 @@ foreach($name in $expected.Keys) {
         try {
             $g.Clear([Drawing.Color]::Transparent)
             $g.DrawIcon($icon,0,0)
+            if ($size -eq 16 -and $name -in @('HdrDisabled','HdrEnabledPaused','HdrAutoIdle','HdrAutoEnabled')) {
+                # Read the dark symbol inside the colored badge. Color alone cannot distinguish play from pause.
+                $rows = foreach ($y in 9..12) {
+                    -join $(foreach ($x in 8..13) { if ($bitmap.GetPixel($x,$y).G -lt 110) { '#' } else { '.' } })
+                }
+                $symbol = if ($name -in @('HdrDisabled','HdrEnabledPaused')) { @('.#..#.') * 4 }
+                          else { @('.##...','.####.','.####.','.##...') }
+                if (($rows -join '/') -ne ($symbol -join '/')) { throw "$name rendered the wrong tray badge: $rows" }
+            }
             $counts=@(0,0,0)
             for($x=0;$x -lt $size;$x++) {for($y=0;$y -lt $size;$y++) {
                 $p=$bitmap.GetPixel($x,$y)
@@ -27,4 +36,4 @@ foreach($name in $expected.Keys) {
         } finally {$g.Dispose();$bitmap.Dispose();$icon.Dispose()}
     }
 }
-'PASS: all six icons render with the correct status colors at 16, 20, 24, 32, 48, and 64 pixels.'
+'PASS: all nine icons render with the correct status colors at 16, 20, 24, 32, 48, and 64 pixels.'

@@ -21,11 +21,16 @@ function Make-TestArchive([bool]$Invalid) {
 Make-TestArchive $false
 & $script
 if ([IO.File]::ReadAllText((Join-Path $root 'Package\package.commit')) -ne ('a' * 40)) { throw 'Commit marker missing' }
+# A cached archive under the old name and a fresh renamed archive must both work.
+$prefix = 'hdr-control-' + ('a' * 40) + '/'
+Make-TestArchive $false
+& $script
+if ([IO.File]::ReadAllText((Join-Path $root 'Package\package.commit')) -ne ('a' * 40)) { throw 'Renamed archive commit marker missing' }
 Set-Content -LiteralPath (Join-Path $root 'Package\old-only.txt') -Value 'old package'
 $packageCreated = (Get-Item -LiteralPath (Join-Path $root 'Package')).CreationTimeUtc
 New-Item -ItemType Directory -Path (Join-Path $root 'Package\obsolete-dir') | Out-Null
 Set-Content -LiteralPath (Join-Path $root 'Package\obsolete-dir\old.txt') -Value 'obsolete'
-New-Item -ItemType Directory -Path (Join-Path $root 'Package.previous') | Out-Null
+New-Item -ItemType Directory -Path (Join-Path $root 'Package.previous') -Force | Out-Null
 $previousCreated = (Get-Item -LiteralPath (Join-Path $root 'Package.previous')).CreationTimeUtc
 $backupPath = Join-Path $root 'before-sync-20261028-120000.zip'
 Copy-Item -LiteralPath $app.PreviousLocation -Destination $backupPath

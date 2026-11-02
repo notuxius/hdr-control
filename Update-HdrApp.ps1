@@ -1,4 +1,4 @@
-[CmdletBinding()]
+﻿[CmdletBinding()]
 param([string]$Version, [switch]$FunctionsOnly)
 
 # Stable releases use MAJOR.MINOR.PATCH. Preview releases are never offered.
@@ -8,8 +8,8 @@ function ConvertTo-HdrVersion([string]$Value) {
 }
 
 function Get-HdrPackageFiles {
-    return @('Setup.ps1','HdrSdrMenu.ps1','HdrTray.ps1','TrayTheme.cs','Start-Tray.vbs','Toggle-HdrSdr.vbs',
-        'Update-HdrApp.ps1','VERSION','HdrSdrMenu.ico','HdrEnabled.ico','HdrDisabled.ico','HdrUnavailable.ico',
+    return @('Setup.ps1','HdrSdrMenu.ps1','HdrTray.ps1','HdrProfiles.ps1','ProfilesUi.cs','ProcessGridTheme.cs','TrayTheme.cs','HdrLocation.cs','Start-Tray.vbs','Toggle-HdrSdr.vbs',
+        'Update-HdrApp.ps1','HdrApps.community.txt','VERSION','HdrSdrMenu.ico','HdrEnabled.ico','HdrAutoEnabled.ico','HdrEnabledPaused.ico','HdrAutoIdle.ico','HdrDisabled.ico','HdrUnavailable.ico',
         'HdrEnableAction.ico','HdrDisableAction.ico','HdrUnavailableAction.ico','hdr-context-menu.nss')
 }
 
@@ -19,7 +19,7 @@ function Expand-HdrUpdate([string]$Archive, [string]$Destination, [string]$Expec
     $zip = [IO.Compression.ZipFile]::OpenRead($Archive)
     try {
         $roots = @($zip.Entries | ForEach-Object { $_.FullName.Split('/')[0] } | Select-Object -Unique)
-        if ($roots.Count -ne 1 -or $roots[0] -cnotmatch ('^hdr-context-menu-v?' + [regex]::Escape($ExpectedVersion) + '$')) { throw 'The update archive has an unexpected root folder.' }
+        if ($roots.Count -ne 1 -or $roots[0] -cnotmatch ('^hdr-(?:control|context-menu)-v?' + [regex]::Escape($ExpectedVersion) + '$')) { throw 'The update archive has an unexpected root folder.' }
         $root = $roots[0] + '/'
         $required = @(Get-HdrPackageFiles)
         $found = @{}
@@ -47,7 +47,7 @@ function Expand-HdrUpdate([string]$Archive, [string]$Destination, [string]$Expec
         foreach ($name in $required) {
             [IO.Compression.ZipFileExtensions]::ExtractToFile($found[$name],(Join-Path $Destination $name))
         }
-        foreach ($name in @('Setup.ps1','HdrSdrMenu.ps1','HdrTray.ps1','Update-HdrApp.ps1')) {
+        foreach ($name in @('Setup.ps1','HdrSdrMenu.ps1','HdrTray.ps1','HdrProfiles.ps1','Update-HdrApp.ps1')) {
             $parseErrors = $null
             [void][Management.Automation.Language.Parser]::ParseFile((Join-Path $Destination $name),[ref]$null,[ref]$parseErrors)
             if ($parseErrors) { throw ('The update contains an invalid script: ' + $name) }
@@ -58,8 +58,38 @@ function Expand-HdrUpdate([string]$Archive, [string]$Destination, [string]$Expec
 function Receive-HdrUpdate([string]$ReleaseVersion, [string]$Archive) {
     [void](ConvertTo-HdrVersion $ReleaseVersion)
     [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
-    $url = 'https://codeload.github.com/notuxius/hdr-context-menu/zip/refs/tags/v' + $ReleaseVersion
+    $url = 'https://codeload.github.com/notuxius/hdr-control/zip/refs/tags/v' + $ReleaseVersion
     Invoke-WebRequest -UseBasicParsing -Uri $url -OutFile $Archive -TimeoutSec 120 -ErrorAction Stop
+}
+
+function Restore-HdrCommunityBundle([string]$Source) {
+    $newFiles=@('HdrAutoEnabled.ico','HdrEnabledPaused.ico','HdrAutoIdle.ico','HdrApps.community.txt','HdrProfiles.ps1','ProfilesUi.cs','ProcessGridTheme.cs','HdrLocation.cs')
+    $missing=@($newFiles | Where-Object { -not (Test-Path -LiteralPath (Join-Path $Source $_) -PathType Leaf) })
+    if (-not $missing.Count) { return }
+    # Older updaters stage only their known runtime files. Recover new modules
+    # from their already-downloaded release archive, without a network call.
+    $parent = Split-Path $Source
+    if ((Split-Path $Source -Leaf) -ne 'Package' -or (Split-Path $parent -Leaf) -notmatch '^hdr-update-[a-f0-9]{32}$') {
+        throw ('Package file missing: '+($missing -join ', '))
+    }
+    $stage = Join-Path $parent ('CommunityBundle-' + [Guid]::NewGuid().ToString('N'))
+    try {
+        $version = [IO.File]::ReadAllText((Join-Path $Source 'VERSION')).Trim()
+        Expand-HdrUpdate (Join-Path $parent 'update.zip') $stage $version
+        # Only recover data belonging to the exact staged installer/runtime.
+        foreach ($name in @('Setup.ps1','HdrTray.ps1','Update-HdrApp.ps1')) {
+            if ((Get-FileHash -LiteralPath (Join-Path $Source $name)).Hash -ne (Get-FileHash -LiteralPath (Join-Path $stage $name)).Hash) {
+                throw 'The release archive does not match the staged update.'
+            }
+        }
+        foreach ($name in $missing) { Copy-Item -LiteralPath (Join-Path $stage $name) -Destination $Source -ErrorAction Stop }
+    } finally {
+        $full = [IO.Path]::GetFullPath($stage)
+        if ([IO.Path]::GetDirectoryName($full) -eq [IO.Path]::GetFullPath($parent) -and
+            [IO.Path]::GetFileName($full) -match '^CommunityBundle-[a-f0-9]{32}$' -and (Test-Path -LiteralPath $full)) {
+            Remove-Item -LiteralPath $full -Recurse -Force
+        }
+    }
 }
 
 function Start-HdrInstaller([string]$Source) {
@@ -115,10 +145,10 @@ try {
     $backup = Join-Path $work 'Previous'
     try { Install-HdrUpdate $source $installed $backup $Version }
     catch { if ($_.Exception.Message -like 'Update recovery needs attention*') { $preserve = $true }; throw }
-    [void][Windows.Forms.MessageBox]::Show(('HDR Context Menu has been updated to version ' + $Version + '.'),'Update complete','OK','Information')
+    [void][Windows.Forms.MessageBox]::Show(('HDR Control has been updated to version ' + $Version + '.'),'Update complete','OK','Information')
 } catch {
     $result = 1
-    [void][Windows.Forms.MessageBox]::Show(('Could not finish the update.' + "`n`n" + $_.Exception.Message),'HDR Context Menu','OK','Warning')
+    [void][Windows.Forms.MessageBox]::Show(('Could not finish the update.' + "`n`n" + $_.Exception.Message),'HDR Control','OK','Warning')
 } finally {
     # This unique temporary folder is the only recursive cleanup target.
     if (-not $preserve -and (Test-Path -LiteralPath $work)) {

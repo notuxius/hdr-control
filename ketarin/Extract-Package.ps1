@@ -73,7 +73,7 @@ function Remove-OldDownloads {
             try {
                 $backup = [IO.Compression.ZipFile]::OpenRead($full)
                 $backupRoots = @($backup.Entries | ForEach-Object { ($_.FullName -split '/')[0] } | Select-Object -Unique)
-                $ownedArchive = $backupRoots.Count -eq 1 -and $backupRoots[0] -match '^hdr-context-menu-[0-9a-f]{40}$'
+                $ownedArchive = $backupRoots.Count -eq 1 -and $backupRoots[0] -match '^hdr-(?:control|context-menu)-[0-9a-f]{40}$'
             } catch { } finally { if ($null -ne $backup) { $backup.Dispose() } }
             if ($ownedArchive) { Remove-Item -LiteralPath $full -Force }
         }
@@ -92,21 +92,21 @@ try {
     try {
         $downloadRoot = @($probe.Entries | ForEach-Object { ($_.FullName -split '/')[0] } | Select-Object -Unique)
     } finally { $probe.Dispose() }
-    if ($downloadRoot.Count -ne 1 -or $downloadRoot[0] -ne ('hdr-context-menu-' + $expectedCommit)) {
+    if ($downloadRoot.Count -ne 1 -or $downloadRoot[0] -cnotmatch ('^hdr-(?:control|context-menu)-' + $expectedCommit + '$')) {
         # Ketarin may resolve the download URL before refreshing its version indicator.
         # Fetch the exact detected commit if main changed between those two requests.
         $activeArchive = Join-Path $stage 'detected-commit.zip'
         $client = New-Object Net.WebClient
         try {
             $client.Headers['User-Agent'] = 'HdrContextMenu-Ketarin'
-            $client.DownloadFile(('https://codeload.github.com/notuxius/hdr-context-menu/zip/' + $expectedCommit), $activeArchive)
+            $client.DownloadFile(('https://codeload.github.com/notuxius/hdr-control/zip/' + $expectedCommit), $activeArchive)
         } finally { $client.Dispose() }
     }
     $zip = [IO.Compression.ZipFile]::OpenRead($activeArchive)
     try {
         $roots = @($zip.Entries | ForEach-Object { ($_.FullName -split '/')[0] } | Select-Object -Unique)
-        if ($roots.Count -ne 1 -or $roots[0] -notmatch '^hdr-context-menu-([0-9a-f]{40})$') {
-            throw 'The download is not a commit archive from hdr-context-menu.'
+        if ($roots.Count -ne 1 -or $roots[0] -notmatch '^hdr-(?:control|context-menu)-([0-9a-f]{40})$') {
+            throw 'The download is not a commit archive from hdr-control.'
         }
         $commit = $Matches[1]
         if ($commit -ne $expectedCommit) { throw 'The downloaded archive does not match the detected GitHub commit.' }
@@ -121,7 +121,7 @@ try {
     } finally { $zip.Dispose() }
     [IO.Compression.ZipFile]::ExtractToDirectory($activeArchive, $stage)
     $source = Join-Path $stage $roots[0]
-    foreach ($required in @('Setup.ps1','HdrSdrMenu.ps1','HdrTray.ps1','TrayTheme.cs','Start-Tray.vbs','Toggle-HdrSdr.vbs','HdrSdrMenu.ico','HdrEnabled.ico','HdrDisabled.ico','HdrUnavailable.ico','HdrEnableAction.ico','HdrDisableAction.ico','HdrUnavailableAction.ico','hdr-context-menu.nss')) {
+    foreach ($required in @('Setup.ps1','HdrSdrMenu.ps1','HdrTray.ps1','HdrProfiles.ps1','ProfilesUi.cs','ProcessGridTheme.cs','TrayTheme.cs','HdrLocation.cs','Update-HdrApp.ps1','HdrApps.community.txt','VERSION','Start-Tray.vbs','Toggle-HdrSdr.vbs','HdrSdrMenu.ico','HdrEnabled.ico','HdrAutoEnabled.ico','HdrEnabledPaused.ico','HdrAutoIdle.ico','HdrDisabled.ico','HdrUnavailable.ico','HdrEnableAction.ico','HdrDisableAction.ico','HdrUnavailableAction.ico','hdr-context-menu.nss')) {
         if (-not (Test-Path -LiteralPath (Join-Path $source $required) -PathType Leaf)) {
             throw ('The package is incomplete: ' + $required)
         }

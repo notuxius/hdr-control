@@ -37,7 +37,7 @@ try {
     New-Item -ItemType Directory -Path $OutputDirectory -Force | Out-Null
     & $CompilerPath "/DSourceRoot=$stage" "/DAppVersion=$releaseVersion" "/DBuildOutput=$OutputDirectory" (Join-Path $PSScriptRoot 'HdrContextMenu.iss')
     if ($LASTEXITCODE -ne 0) { throw 'Installer compilation failed.' }
-    $exe = Join-Path $OutputDirectory ('HDR-Context-Menu-' + $releaseVersion + '-Setup.exe')
+    $exe = Join-Path $OutputDirectory ('HDR-Control-' + $releaseVersion + '-Setup.exe')
     if (-not (Test-Path -LiteralPath $exe)) { throw 'Installer output is missing.' }
     $hash = (Get-FileHash -LiteralPath $exe -Algorithm SHA256).Hash.ToLowerInvariant()
     [IO.File]::WriteAllText(($exe + '.sha256'), $hash + '  ' + [IO.Path]::GetFileName($exe) + "`n", [Text.UTF8Encoding]::new($false))
