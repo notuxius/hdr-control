@@ -8,6 +8,7 @@ $script:realStartHdrChange = ${function:Start-HdrChange}
 $script:realShowHdrControls = ${function:Show-HdrControls}
 $script:realShowHdrSettings = ${function:Show-HdrSettingsMenu}
 $script:realStartAppUpdate = ${function:Start-HdrAppUpdate}
+$script:realUpdateCheck = ${function:Start-HdrUpdateCheck}
 Add-Type @'
 namespace LocalHdrMenu {
     public static class DisplayApi {
@@ -42,8 +43,10 @@ function Display([string]$Name, [bool]$Supported, [bool]$Enabled) {
     [pscustomobject]@{Name=$Name;HdrSupported=$Supported;HdrEnabled=$Enabled;DisplayId=[Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($Name))}
 }
 $script:syncCount=0
-Initialize-HdrTray
 $script:hdrUpdateSettingsKey='HKEY_CURRENT_USER\Software\HdrControlTrayTest-'+[Guid]::NewGuid().ToString('N')
+$savedNextCheck = [DateTimeOffset]::UtcNow.AddHours(1).ToUnixTimeSeconds()
+[Microsoft.Win32.Registry]::SetValue($script:hdrUpdateSettingsKey,'NextUpdateCheck',$savedNextCheck,[Microsoft.Win32.RegistryValueKind]::QWord)
+Initialize-HdrTray
 $hdrProtocolPath='Registry::'+$script:hdrUpdateSettingsKey+'\Protocol'
 try {
     Assert ($null -ne $script:hdrTray.ShowMenuMethod) 'Native tray popup method unavailable'
@@ -70,6 +73,29 @@ try {
     $script:hdrTray.About.PerformClick()
     $about.remove_Shown($clickUpdate)
     Assert ($script:updateRequests -eq 1) 'About should start the update check from its button'
+    $daily=$about.AutoCheckUpdates
+    Assert (-not $daily.Checked -and $script:hdrTray.NextUpdateCheck -eq $savedNextCheck) 'Startup should restore the schedule and default to manual checks'
+    $click=[Windows.Forms.CheckBox].GetMethod('OnClick',[Reflection.BindingFlags]'Instance,NonPublic')
+    $click.Invoke($daily,@([EventArgs]::Empty))
+    Assert ($daily.Checked -and [Microsoft.Win32.Registry]::GetValue($script:hdrUpdateSettingsKey,'AutoCheckUpdates',0) -eq 1) 'Enabling daily checks should persist'
+    & $script:realUpdateCheck -Automatic
+    Assert ($null -eq $script:hdrTray.UpdateCheck) 'Restart must not repeat a recent check'
+    $script:hdrTray.NextUpdateCheck=0
+    $script:hdrTray.CommunityUpdate=@{}
+    & $script:realUpdateCheck -Automatic
+    Assert ($null -eq $script:hdrTray.UpdateCheck -and $script:hdrTray.NextUpdateCheck -eq 0) 'A busy updater must defer the daily check'
+    $script:hdrTray.CommunityUpdate=$null
+    & $script:realUpdateCheck -Automatic
+    $remaining=[Microsoft.Win32.Registry]::GetValue($script:hdrUpdateSettingsKey,'NextUpdateCheck',0) - [DateTimeOffset]::UtcNow.ToUnixTimeSeconds()
+    Assert ($null -ne $script:hdrTray.UpdateCheck -and $remaining -ge 86395 -and $remaining -le 86400) 'A due check should start and persist a 24-hour delay'
+    $script:hdrTray.UpdateCheck=[pscustomobject]@{Finished=$true;NoRelease=$true;Error=$null}
+    Complete-HdrUpdateCheck
+    Assert ($null -eq $script:lastNotification -and $null -eq $script:lastMessage) 'A scheduled check with no update should be quiet'
+    $click.Invoke($daily,@([EventArgs]::Empty))
+    $script:hdrTray.NextUpdateCheck=0
+    & $script:realUpdateCheck -Automatic
+    Assert ($null -eq $script:hdrTray.UpdateCheck -and [Microsoft.Win32.Registry]::GetValue($script:hdrUpdateSettingsKey,'AutoCheckUpdates',1) -eq 0) 'Disabling must cancel future checks and persist'
+    $script:hdrTray.AutomaticUpdateCheck=$false
     Assert ($about.Controls.Find('GitHubLink',$true).Count -eq 1 -and $about.MessageText.Text -notmatch 'github\.com') 'About should link to GitHub through the icon'
     Assert ($about.Controls.Find('VersionLabel',$true)[0].Text -eq 'Version: 1.0.0' -and $about.MessageText.Text -match 'Middle click') 'About should show version and controls'
     foreach ($case in @('current','newer','older','none','preview','offline','invalid')) {
