@@ -1188,12 +1188,21 @@ function Show-HdrAbout {
     [void]$window.ShowDialog()
 }
 
-function Start-HdrUpdateCheck([switch]$FromNotification) {
+function Start-HdrUpdateCheck([switch]$FromNotification, [switch]$Automatic) {
     if ($null -ne $script:hdrTray.UpdateCheck -or $null -ne $script:hdrTray.UpdateProcess -or $null -ne $script:hdrTray.CommunityUpdate) { return }
+    if ($Automatic -and -not $script:hdrTray.AboutWindow.AutoCheckUpdates.Checked) { return }
+    if ($script:hdrTray.AboutWindow.AutoCheckUpdates.Checked) {
+        $now = [DateTimeOffset]::UtcNow.ToUnixTimeSeconds()
+        if ($Automatic -and $now -lt $script:hdrTray.NextUpdateCheck) { return }
+        $script:hdrTray.NextUpdateCheck = $now + 86400
+        try { [Microsoft.Win32.Registry]::SetValue($script:hdrUpdateSettingsKey,'NextUpdateCheck',$script:hdrTray.NextUpdateCheck,[Microsoft.Win32.RegistryValueKind]::QWord) }
+        catch { Write-HdrDiagnostic 'UPDATE' ('Could not save the next update check: ' + $_.Exception.Message) }
+    }
     $script:hdrTray.AboutWindow.SetUpToDate($false)
     $script:hdrTray.CheckUpdates.Enabled = $false
     $script:hdrTray.CheckUpdates.Text = 'Checking for updates...'
     $script:hdrTray.CheckFromNotification = $FromNotification.IsPresent
+    $script:hdrTray.AutomaticUpdateCheck = $Automatic.IsPresent
     $script:hdrTray.UpdateCheck = [LocalHdrMenu.UpdateCheck]::new()
     $script:hdrTray.UpdateCheck.Start()
     Update-HdrCommunityUpdateButton
@@ -1230,11 +1239,15 @@ function Complete-HdrUpdateCheck {
         $script:hdrTray.AboutWindow.SetAvailableVersion($null)
         $script:hdrTray.CheckedForUpdates = $true
         if ($script:hdrTray.AboutWindow.Visible) { $script:hdrTray.AboutWindow.SetUpToDate($true) }
-        if (-not $script:hdrTray.CheckFromNotification) {
+        if (-not $script:hdrTray.CheckFromNotification -and -not $script:hdrTray.AutomaticUpdateCheck) {
             if ($check.NoRelease) { Show-HdrNotification "No newer version is available. Current version: $installed." -OpenAbout }
             else { Show-HdrNotification "You have the latest version ($installed)." -OpenAbout }
         }
-    } catch { [void](Show-HdrMessage 'Could not check for updates. Check your internet connection and try again later.') }
+    } catch {
+        if ($script:hdrTray.AvailableVersion) { $script:hdrTray.CheckUpdates.Text = 'Install update' }
+        if ($script:hdrTray.AutomaticUpdateCheck) { Write-HdrDiagnostic 'UPDATE' $_.Exception.Message }
+        else { [void](Show-HdrMessage 'Could not check for updates. Check your internet connection and try again later.') }
+    }
 }
 
 function Install-HdrNotificationUpdate([string]$Id) {
@@ -1426,6 +1439,18 @@ function Initialize-HdrTray {
     $script:hdrTray.AppSettings.Name = 'AppSettings'
     Set-HdrAutomaticMenuState (Get-HdrAutomationPreference 'AutomaticHdr')
     $script:hdrTray.CheckUpdates = $script:hdrTray.AboutWindow.CheckUpdates
+    $autoCheck = $script:hdrTray.AboutWindow.AutoCheckUpdates
+    $autoCheck.Checked = [Microsoft.Win32.Registry]::GetValue($script:hdrUpdateSettingsKey,'AutoCheckUpdates',0) -eq 1
+    $nextCheck = [Microsoft.Win32.Registry]::GetValue($script:hdrUpdateSettingsKey,'NextUpdateCheck',0)
+    $script:hdrTray.NextUpdateCheck = if ($nextCheck -is [long]) { [Math]::Min($nextCheck,[DateTimeOffset]::UtcNow.AddDays(1).ToUnixTimeSeconds()) } else { 0 }
+    $autoCheck.add_Click({
+        param($sender,$eventArgs)
+        try { [Microsoft.Win32.Registry]::SetValue($script:hdrUpdateSettingsKey,'AutoCheckUpdates',[int]$sender.Checked) }
+        catch {
+            $sender.Checked = -not $sender.Checked
+            [void](Show-HdrMessage 'Could not save the daily update preference.')
+        }
+    })
     $script:hdrTray.About.Name = 'About'
     $script:hdrTray.Displays.DropDown = New-Object LocalHdrMenu.TrayPopupMenu
     $script:hdrTray.Displays.DropDown.ShowActionIcons = $true
@@ -1469,6 +1494,7 @@ function Initialize-HdrTray {
         Complete-HdrAppUpdate
         Complete-HdrCommunityUpdate
         Complete-HdrInstalledScan
+        if ($script:hdrTray.AboutWindow.AutoCheckUpdates.Checked) { Start-HdrUpdateCheck -Automatic }
         if ($aboutRequest -and $aboutRequest.WaitOne(0)) {
             [void]$script:hdrTray.EventWindow.BeginInvoke([Action]{
                 if (-not $script:hdrTray.CheckedForUpdates) { Start-HdrUpdateCheck -FromNotification }

@@ -22,6 +22,9 @@ foreach($scale in @(1.0,1.25,1.5,2.0)) {
                 $label=$form.Controls.Find('VersionLabel',$true)[0]
                 Assert ($label.Text -eq "Version: $version") 'About version is missing'
                 $update=$form.CheckUpdates
+                $daily=$form.AutoCheckUpdates
+                Assert ($daily.Left -ge $update.Right -and $daily.Right -le $form.AcceptButton.Left -and $daily.Top -eq $update.Top -and
+                    $daily.Width -ge ([Windows.Forms.TextRenderer]::MeasureText($daily.Text,$daily.Font).Width + 32*$scale)) 'Daily update checkbox must fit beside the update button'
                 Assert ($update.Parent -eq $footer -and $footer.Bottom -eq $form.ClientSize.Height -and $update.Left -eq $footer.Padding.Left -and $update.Top -eq $form.AcceptButton.Top -and $update.Right -lt $form.AcceptButton.Left) 'Update button should sit at the bottom left, aligned with OK'
                 $form.SetUpToDate($true)
                 $status=$form.Controls.Find('UpdateStatus',$true)[0]

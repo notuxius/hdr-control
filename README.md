@@ -1,6 +1,6 @@
 # HDR Control
 
-Current version: **1.4.2**.
+Current version: **1.5.0**.
 
 Control HDR, automate switching, and adjust SDR brightness on Windows. Formerly **HDR Context Menu**.
 
@@ -41,6 +41,7 @@ Both menus open centered above the tray icon, shifting inward near screen edges 
 - In **Settings...**, **Profiles and shortcuts** edits the default exit behavior, monitor aliases, display presets, and global keyboard shortcuts.
 - **Start with Windows** registers HDR Control in your Windows Startup folder. Windows decides when to show its built-in startup notification. When you turn startup off in the tray, HDR Control confirms that it will no longer start at sign-in. Your preference survives updates.
 - **About** shows the installed version and mouse controls. Select **Check for updates** to check for a stable release. If a newer version is available, click its Windows notification or select **Install update** in About to download and validate that version, run the installer, and restart the tray. Windows may request administrator approval. After a successful upgrade, HDR Control sends an **Update complete** notification with the installed version. An up-to-date notification opens About. Failed installations attempt to restore the previous version and retain startup preferences.
+- Select **Check daily for updates** in About to let the tray check automatically every 24 hours. It is off by default. The tray checks when first enabled and remembers the next check across restarts. If the tray was closed when a check was due, it checks when it next runs. Background checks notify you only when a newer release is available.
 - **Copy diagnostics**, at the bottom-left of **Profiles and shortcuts** on every tab, copies Windows/app versions, current display capabilities, and the last 80 local diagnostic events. A brief **Copied to clipboard** message confirms success.
 - **Exit**, which closes the helper. Automatic desktop label refresh also stops until the helper is restarted (at the next sign-in if startup is enabled).
 

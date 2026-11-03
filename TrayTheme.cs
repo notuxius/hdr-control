@@ -449,6 +449,7 @@ namespace LocalHdrMenu {
     public sealed class DialogMessageForm : DialogForm {
         public readonly Label MessageText=new Label();
         public readonly DialogButton CheckUpdates;
+        public readonly DialogCheckBox AutoCheckUpdates;
         readonly SaveStatusLabel updateStatus;
         public void SetAvailableVersion(string version) {
             updateStatus.SetIdleText(String.IsNullOrEmpty(version)?"":"Version "+version+" available");
@@ -494,19 +495,22 @@ namespace LocalHdrMenu {
                 case MessageBoxButtons.RetryCancel: results=new[]{DialogResult.Retry,DialogResult.Cancel}; break;
                 default: throw new ArgumentOutOfRangeException("buttons");
             }
-            footer.ColumnCount=results.Length+1;
+            footer.ColumnCount=results.Length+(about?2:1);
             if(about) {
+                footer.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
                 footer.RowStyles.Add(new RowStyle(SizeType.AutoSize));
                 updateStatus=new SaveStatusLabel { Name="UpdateStatus", Size=new Size(180,statusHeight), TextAlign=ContentAlignment.MiddleLeft, Margin=Padding.Empty };
                 footer.Controls.Add(updateStatus,0,0);
                 CheckUpdates=new DialogButton { Text="Check for updates", Size=new Size(180,36), Margin=Padding.Empty };
                 footer.Controls.Add(CheckUpdates,0,buttonRow);
+                AutoCheckUpdates=new DialogCheckBox { Text="Check daily for updates", Dock=DockStyle.Fill, Margin=new Padding(8,0,0,0) };
+                footer.Controls.Add(AutoCheckUpdates,1,buttonRow);
             }
             footer.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,100));
             for(int i=0;i<results.Length;i++) {
                 footer.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
                 var button=new DialogButton {Text=results[i].ToString(),DialogResult=results[i],Size=new Size(104,36),Margin=new Padding(6,0,0,0),Primary=i==0,TabIndex=i};
-                footer.Controls.Add(button,i+1,buttonRow);
+                footer.Controls.Add(button,i+(about?2:1),buttonRow);
                 if(i==0) AcceptButton=button;
                 if(i==results.Length-1) CancelButton=button;
             }
