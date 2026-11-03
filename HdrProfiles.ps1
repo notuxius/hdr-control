@@ -195,14 +195,18 @@ function Update-HdrPolicy($Displays) {
         return
     }
     foreach ($key in $matches.Keys) {
-        if (-not $state.Sessions.ContainsKey($key)) { $state.Sessions[$key]=@{First=$now;EmptySince=$null;Started=$false;Rule=$matches[$key]} }
+        if (-not $state.Sessions.ContainsKey($key)) { $state.Sessions[$key]=@{First=$now;EmptySince=$null;Started=$false;Notified=$false;Rule=$matches[$key]} }
         $state.Sessions[$key].EmptySince=$null; $state.Sessions[$key].Rule=$matches[$key]
+        if ($running.ContainsKey($key)) { $state.Sessions[$key].SeenRunning=$true }
     }
     foreach ($key in @($state.Sessions.Keys)) {
         $s=$state.Sessions[$key]
         if (-not $matches.ContainsKey($key)) {
             if ($null -eq $s.EmptySince) { $s.EmptySince=$now }
-            if (($now-$s.EmptySince).TotalSeconds -ge $s.Rule.ExitDelay) { $state.Sessions.Remove($key) }
+            if (($now-$s.EmptySince).TotalSeconds -ge $s.Rule.ExitDelay) {
+                $s.Exited=$s.SeenRunning -and -not $running.ContainsKey($key)
+                $state.Sessions.Remove($key)
+            }
         }
     }
     $demand=@{}; $present=@{}
@@ -218,7 +222,7 @@ function Update-HdrPolicy($Displays) {
             $d=$present[$key]
             if ($null -eq $d -or -not $d.HdrSupported -or (@($session.Rule.Targets).Count -and $key -notin $session.Rule.Targets)) { continue }
             if (-not $demand.ContainsKey($key)) { $demand[$key]=@() }
-            $demand[$key]+=,$session.Rule
+            $demand[$key]+=,$session
         }
     }
     foreach ($key in $demand.Keys) {
@@ -228,7 +232,10 @@ function Update-HdrPolicy($Displays) {
                 Owned=$false;Released=$false;RetryAt=[DateTime]::MinValue;Pending=$false;ExitPolicy='Restore';Closing=$false}
         }
         $entry=$state.Displays[$key]; $entry.Closing=$false
-        foreach ($rule in $demand[$key]) {
+        # Retain the last sessions demanding this monitor through exit retries.
+        $entry.LastSessions=$demand[$key]
+        foreach ($session in $demand[$key]) {
+            $rule=$session.Rule
             $policy=if ($rule.ExitPolicy -eq 'Default') { $profiles.ExitPolicy } else { $rule.ExitPolicy }
             if ($policy -eq 'Sdr') { $entry.ExitPolicy='Sdr' }
         }
@@ -260,7 +267,16 @@ function Update-HdrPolicy($Displays) {
         }
         if ($now -lt $entry.RetryAt) { $decision='Waiting to retry display change'; continue }
         $entry.RetryAt=$now.AddSeconds(30); $entry.Pending=$true; $entry.Closing=-not $wanted
-        $script:hdrTray.PolicyPending=@{Key=$key;Target=[bool]$target;Entry=$entry}
+        # Explicit launches can demand HDR before the game process exists.
+        $notifySessions=@(if ($automatic -and $wanted) {
+            foreach ($session in $demand[$key]) {
+                $gameKey=ConvertTo-HdrAppKey $session.Rule.Executable
+                if (-not $session.Notified -and $running.ContainsKey($gameKey) -and $lists.Effective.ContainsKey($gameKey)) { $session }
+            }
+        } elseif (-not $wanted -and -not $target) {
+            $entry.LastSessions | Where-Object { $_.Exited -and -not $_.ExitNotified }
+        })
+        $script:hdrTray.PolicyPending=@{Key=$key;Target=[bool]$target;Entry=$entry;NotifySessions=$notifySessions}
         Start-HdrChange -NextAction $(if ($target) {'On'} else {'Off'}) -DisplayId $d.DisplayId -Automatic
         if ($null -eq $script:hdrTray.Pending) { Complete-HdrPolicyCommand $false }
         $busy=$true
@@ -275,6 +291,16 @@ function Complete-HdrPolicyCommand([bool]$Success) {
     if ($null -eq $entry -or -not [object]::ReferenceEquals($entry,$op.Entry)) { return }
     $entry.Pending=$false
     if ($Success) { $entry.Expected=$op.Target; $entry.Owned=$true; $entry.RetryAt=[DateTime]::MinValue }
+    if ($Success -and -not $entry.Released -and $op.NotifySessions.Count) {
+        $games=($op.NotifySessions | ForEach-Object { $_.Rule.Executable } | Sort-Object -Unique) -join ', '
+        if ($op.Target) {
+            foreach ($session in $op.NotifySessions) { $session.Notified=$true }
+            Show-HdrNotification ('HDR turned on automatically for '+$games+'.')
+        } else {
+            foreach ($session in $op.NotifySessions) { $session.ExitNotified=$true }
+            Show-HdrNotification ('HDR turned off automatically after '+$games+' exited.')
+        }
+    }
     Write-HdrDiagnostic 'DISPLAY' ('Automatic change '+$op.Target+' success='+$Success)
 }
 
@@ -385,15 +411,20 @@ function Submit-HdrLaunch([string]$Id) {
         '-NoProfile -NonInteractive -STA -WindowStyle Hidden -ExecutionPolicy Bypass -File "{0}" -Action Watch' -f (Join-Path $PSScriptRoot 'HdrSdrMenu.ps1')
     ) -WindowStyle Hidden | Out-Null
 }
-function Receive-HdrLaunchRequests {
+function Receive-HdrLaunchRequests([switch]$UpdatesOnly) {
     $directory=Get-HdrRequestDirectory
     if (-not [IO.Directory]::Exists($directory)) { return }
-    foreach ($file in @(Get-ChildItem -LiteralPath $directory -Filter '*.json' -File | Select-Object -First 10)) {
+    $filter = if ($UpdatesOnly) { 'update-*.json' } else { '*.json' }
+    foreach ($file in @(Get-ChildItem -LiteralPath $directory -Filter $filter -File | Select-Object -First 10)) {
         try {
             if ($file.Length -gt 4096) { throw 'Oversized launch request.' }
             $request=[IO.File]::ReadAllText($file.FullName) | ConvertFrom-Json -ErrorAction Stop
             $created=[DateTime]::Parse($request.CreatedUtc).ToUniversalTime()
             if ([Math]::Abs(([DateTime]::UtcNow-$created).TotalSeconds) -gt 60) { throw 'Launch request expired.' }
+            if ($request.Kind -eq 'InstallUpdate') {
+                Install-HdrNotificationUpdate $request.Id
+                continue
+            }
             if ($request.Kind -eq 'Manual') {
                 if ($request.DisplayId -and $request.DisplayId -cnotmatch '^[A-Za-z0-9+/=]+$') { throw 'Invalid manual target.' }
                 Release-HdrAutomationDisplay ([string]$request.DisplayId)

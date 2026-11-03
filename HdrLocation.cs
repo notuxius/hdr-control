@@ -1,5 +1,6 @@
 using System;
 using System.Device.Location;
+using System.Diagnostics;
 using System.IO;
 using System.Reflection;
 
@@ -8,10 +9,15 @@ using System.Reflection;
 
 namespace LocalHdrMenu {
     internal static class HdrLocation {
-        // Only the tray starts this one-shot reader, with an anonymous stdout pipe.
         static int Main(string[] args) {
-            if (args.Length != 1 || args[0] != "--read-location" || !Console.IsOutputRedirected) return 1;
             try {
+                if (args.Length == 1 && args[0] == "--startup") {
+                    string launcher = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Toggle-HdrSdr.vbs");
+                    var start = new ProcessStartInfo(Path.Combine(Environment.SystemDirectory, "wscript.exe"),
+                        "//NoLogo \"" + launcher + "\" Watch") { UseShellExecute = false, CreateNoWindow = true };
+                    using (Process.Start(start)) { return 0; }
+                }
+                if (args.Length != 1 || args[0] != "--read-location" || !Console.IsOutputRedirected) return 1;
                 using (var watcher = new GeoCoordinateWatcher()) {
                     if (!watcher.TryStart(true, TimeSpan.FromSeconds(12))) return 1;
                     var position = watcher.Position;

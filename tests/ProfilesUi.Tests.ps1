@@ -2,7 +2,7 @@ param([string]$OutputDirectory)
 $ErrorActionPreference='Stop'
 $repo=Split-Path $PSScriptRoot
 Add-Type -AssemblyName System.Windows.Forms,System.Drawing
-Add-Type -Path @((Join-Path $repo 'TrayTheme.cs'),(Join-Path $repo 'ProfilesUi.cs')) -ReferencedAssemblies System.Windows.Forms,System.Drawing
+Add-Type -Path @((Join-Path $repo 'TrayTheme.cs'),(Join-Path $repo 'ProfilesUi.cs')) -ReferencedAssemblies System.Windows.Forms,System.Drawing,UIAutomationProvider,UIAutomationTypes,WindowsBase
 [Windows.Forms.Application]::EnableVisualStyles()
 function Assert($Condition,$Message) { if (-not $Condition) { throw $Message } }
 function Get-AliasTextBounds($Grid,$Color) {
@@ -47,7 +47,7 @@ foreach ($scale in @(1.0,1.25,1.5,2.0)) {
                     $form.AddMonitor([LocalHdrMenu.MonitorAlias]@{Key='B'*64;ModelName='Second monitor';Alias='Side'})
                     $form.AddPreset('example','Gaming'); $form.AddShortcut('example','Ctrl+Alt+H - Gaming')
                 }
-                'GameListsForm' { $form.AddRow('Defaults','ExampleGame.exe','Watching',''); $form.FinishRows() }
+                'GameListsForm' { $form.AddRow('Installed','ExampleGame.exe','Watching',''); $form.FinishRows() }
             }
             $form.Scale([Drawing.SizeF]::new($scale,$scale)); $form.Font=[Drawing.Font]::new('Segoe UI',[single](10*$scale))
             $form.ShowInTaskbar=$false; $form.StartPosition='Manual'; $form.Location=[Drawing.Point]::new(-30000,-30000)

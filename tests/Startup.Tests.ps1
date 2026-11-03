@@ -8,19 +8,26 @@ New-Item -ItemType Directory -Path $temp | Out-Null
 try {
     $source = [IO.File]::ReadAllText((Join-Path $repo 'HdrTray.ps1'))
     $ast = [Management.Automation.Language.Parser]::ParseInput($source,[ref]$null,[ref]$null)
-    foreach ($name in @('Get-HdrStartupEnabled','Set-HdrStartupEnabled','Set-HdrAutomationPreference')) {
+    foreach ($name in @('Set-HdrAutomationPreference')) {
         $definition = $ast.Find({param($node) $node -is [Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -eq $name},$true)
         . ([scriptblock]::Create($definition.Extent.Text.Replace('HKCU:\Software\HdrContextMenu',$key)))
     }
-    if (-not (Get-HdrStartupEnabled)) { throw 'Missing startup preference should default to enabled' }
-    # Toggling the community list creates the settings key before the user has
-    # ever saved StartWithWindows. An existing key with a missing value differs
-    # from an absent key in Windows PowerShell's registry provider.
+    . (Join-Path $repo 'HdrStartup.ps1')
+    $hdrStartupLink=Join-Path $temp 'HDR Control.lnk'
+    $hdrStartupApproval=$key
+    if (Get-HdrStartupEnabled) { throw 'A missing startup shortcut must be off' }
+    Set-HdrStartupEnabled $true
+    if (-not (Get-HdrStartupEnabled)) { throw 'Startup registration failed' }
+    New-Item -Path $key | Out-Null
+    New-ItemProperty -LiteralPath $key -Name 'HDR Control.lnk' -PropertyType Binary -Value ([byte[]](3,0,0,0)) | Out-Null
+    if (Get-HdrStartupEnabled) { throw 'Windows startup disable must be respected' }
+    Remove-ItemProperty -LiteralPath $key -Name 'HDR Control.lnk'
     Set-HdrAutomationPreference 'UseCommunityApps' $false
     if (-not (Get-HdrStartupEnabled)) { throw 'Community-list toggle must not break the default startup preference' }
     Set-HdrStartupEnabled $false
     Set-HdrAutomationPreference 'UseCommunityApps' $true
     if (Get-HdrStartupEnabled) { throw 'Disabled preference was not persisted' }
+    New-ItemProperty -LiteralPath $key -Name StartWithWindows -PropertyType DWord -Value 0 | Out-Null
     $vbs = [IO.File]::ReadAllText((Join-Path $repo 'Toggle-HdrSdr.vbs')).Replace('HKCU\Software\HdrContextMenu\',($key.Replace('HKCU:','HKCU')+'\'))
     $launcher = Join-Path $temp 'Toggle-HdrSdr.vbs'
     [IO.File]::WriteAllText($launcher,$vbs)
@@ -38,6 +45,7 @@ try {
     Run-Launcher 'Startup "LaunchNow"' $true
     Run-Launcher 'Watch' $true
     Set-HdrStartupEnabled $true
+    Set-ItemProperty -LiteralPath $key -Name StartWithWindows -Value 1
     Set-HdrAutomationPreference 'UseCommunityApps' $false
     Set-HdrStartupEnabled $true
     if ((Get-ItemPropertyValue -LiteralPath $key -Name UseCommunityApps) -ne 0) { throw 'Startup toggle erased the community-list preference' }
@@ -46,7 +54,7 @@ try {
 } finally {
     if (Test-Path -LiteralPath $key) { Remove-Item -LiteralPath $key }
     # Delete only the known test files, then its empty temporary directory.
-    foreach ($name in @('Toggle-HdrSdr.vbs','HdrSdrMenu.ps1','result.txt')) {
+    foreach ($name in @('Toggle-HdrSdr.vbs','HdrSdrMenu.ps1','result.txt','HDR Control.lnk')) {
         $path = Join-Path $temp $name
         if (Test-Path -LiteralPath $path) { Remove-Item -LiteralPath $path }
     }

@@ -14,6 +14,7 @@ function Get-HdrAutomationTime { $script:now }
 function Write-HdrDiagnostic($Category,$Message) { }
 function Save-HdrDetectedApps { }
 function Show-HdrMessage($Text) { $script:message=$Text }
+function Show-HdrNotification($Message) { $script:notifications.Add($Message) }
 function Start-HdrChange($NextAction,$DisplayId,[switch]$Automatic) {
     $script:calls.Add([pscustomobject]@{Action=$NextAction;Id=$DisplayId})
     $script:hdrTray.Pending=[pscustomobject]@{HasExited=$false}
@@ -24,6 +25,7 @@ function Reset {
     $script:a=D 'A' $false; $script:b=D 'B' $true; $script:displays=@($a,$b)
     $script:now=[DateTime]::UtcNow; $script:running=@(); $script:enabled=$true; $script:scanFails=$false
     $script:calls=New-Object 'Collections.Generic.List[object]'
+    $script:notifications=New-Object 'Collections.Generic.List[string]'
     $script:hdrTray=@{Automation=(New-HdrAutomationState);Pending=$null;UpdateProcess=$null;Launches=@{};Scene=$null;BrightnessStates=@{};PolicyPending=$null}
 }
 function Poll { $script:now=$script:now.AddSeconds(2); Update-HdrAutomation $script:displays }
@@ -37,6 +39,24 @@ function AddRule($Name,$Keys,$Policy='Restore',$Start=0,$Exit=2) {
     $script:config.Rules+=@($rule); Save-HdrProfiles $config; return $rule
 }
 try {
+    Reset
+    $b.HdrEnabled=$false
+    $script:running=@('game'); Poll
+    Assert ($notifications.Count -eq 0) 'Pending HDR must stay quiet'
+    Finish; Poll; Finish; Poll
+    Assert ($calls.Count -eq 2 -and $notifications.Count -eq 1 -and $notifications[0] -ceq 'HDR turned on automatically for game.exe.') 'Enabling two monitors must notify once with the detected game name'
+    $script:running=@(); Poll; Poll
+    Assert ($notifications.Count -eq 1) 'An exit must wait for a confirmed off command'
+    Finish; Poll; Finish; Poll
+    Assert ($notifications.Count -eq 2 -and $notifications[1] -ceq 'HDR turned off automatically after game.exe exited.') 'Restoring two monitors must notify once'
+    $script:running=@('game'); Poll; Finish
+    Assert ($notifications.Count -eq 3) 'A new launch must notify again'
+
+    Reset
+    $a.HdrEnabled=$true
+    $script:running=@('game'); Poll; Poll
+    Assert ($calls.Count -eq 0 -and $notifications.Count -eq 0) 'Already-enabled HDR must stay quiet'
+
     Reset
     $rule=AddRule 'game.exe' @((Get-HdrBrightnessKey $a))
     $script:running=@('game'); Poll
@@ -83,14 +103,20 @@ try {
     Assert ($calls.Count -eq 1) 'Overlapping game must keep HDR enabled'
     $script:running=@(); Poll; Poll
     Assert ($calls.Count -eq 2) 'Last game must release display'
+    Finish $false; Poll
+    Assert ($notifications.Count -eq 1) 'A failed off command must not announce success'
+    $script:now=$now.AddSeconds(30); Poll; Finish
+    Assert ($notifications.Count -eq 2 -and $notifications[1] -ceq 'HDR turned off automatically after second.exe exited.') 'A successful exit retry must name the last game on the monitor'
 
     Reset
     $rule=AddRule 'game.exe' @((Get-HdrBrightnessKey $a))
     $script:running=@('game'); Poll; Finish $false; Poll
+    Assert ($notifications.Count -eq 0) 'Failed enable must not send a success notification'
     Assert ($calls.Count -eq 1) 'Failed request retried too soon'
     $script:now=$now.AddSeconds(30); Poll
     Assert ($calls.Count -eq 2) 'Failed request never retried'
     Finish; $script:scanFails=$true; $script:running=@(); Poll; Poll
+    Assert ($notifications.Count -eq 1) 'Successful retry must notify once'
     Assert ($calls.Count -eq 2) 'Process scan failure must preserve state'
     $script:scanFails=$false; Poll; Poll
     Assert ($calls.Count -eq 3) 'Scan recovery failed'

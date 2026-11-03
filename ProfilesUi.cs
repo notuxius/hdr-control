@@ -2,10 +2,12 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Drawing;
+using System.IO;
 using System.Runtime.InteropServices;
 using System.Text;
 using System.Threading;
 using System.Windows.Forms;
+using Microsoft.Win32;
 
 namespace LocalHdrMenu {
     public sealed class DisplayChoice {
@@ -210,9 +212,39 @@ try {
             Displays.Columns.Add(new DataGridViewTextBoxColumn {Name="Monitor",HeaderText="Monitor",ReadOnly=true,FillWeight=150});
             Displays.Columns.Add(new DataGridViewCheckBoxColumn {CellTemplate=new DialogCheckBoxCell(),Name="Enabled",HeaderText="HDR enabled",FillWeight=65});
             Displays.Columns.Add(new DataGridViewTextBoxColumn {Name="Brightness",HeaderText="SDR brightness %",FillWeight=90});
+            foreach(DataGridViewColumn column in Displays.Columns) {
+                if(column is DataGridViewCheckBoxColumn) AddCheckHeader(column);
+            }
+            Displays.CurrentCellDirtyStateChanged+=delegate {
+                if(Displays.CurrentCell is DataGridViewCheckBoxCell && Displays.IsCurrentCellDirty)
+                    Displays.CommitEdit(DataGridViewDataErrorContexts.Commit);
+            };
             var save=ProfileUi.Button("Save",504,416); save.DialogResult=DialogResult.OK;
             var cancel=ProfileUi.Button("Cancel",619,416); cancel.DialogResult=DialogResult.Cancel;
             Controls.AddRange(new Control[]{PresetName,Displays,save,cancel}); AcceptButton=save; CancelButton=cancel; ProfileUi.AddHeader(this,"Display preset","Save a display setup you can apply in one step."); ProfileUi.Theme(this);
+        }
+        void AddCheckHeader(DataGridViewColumn column) {
+            string label=column.HeaderText;
+            Func<int> countChecked=delegate {
+                int count=0;
+                foreach(DataGridViewRow row in Displays.Rows)
+                    if(true.Equals(row.Cells[column.Index].Value)) count++;
+                return count;
+            };
+            Action update=delegate {
+                int count=countChecked();
+                column.HeaderText=DialogTheme.CheckMark(DialogTheme.ColumnCheckState(count,Displays.Rows.Count))+" "+label;
+            };
+            Displays.RowsAdded+=delegate { update(); };
+            Displays.CellValueChanged+=delegate(object sender,DataGridViewCellEventArgs e) {
+                if(e.RowIndex>=0 && e.ColumnIndex==column.Index) update();
+            };
+            Displays.ColumnHeaderMouseClick+=delegate(object sender,DataGridViewCellMouseEventArgs e) {
+                if(e.Button!=MouseButtons.Left || e.ColumnIndex!=column.Index || !Displays.EndEdit()) return;
+                bool value=countChecked()!=Displays.Rows.Count;
+                foreach(DataGridViewRow row in Displays.Rows) row.Cells[column.Index].Value=value;
+            };
+            update();
         }
         public void AddDisplay(string key,string label,bool include,bool enabled,string brightness) {
             int index=Displays.Rows.Add(include,label,enabled,brightness); Displays.Rows[index].Tag=key;
@@ -271,6 +303,13 @@ try {
         public readonly ListView Presets=new DialogListView(),Shortcuts=new DialogListView();
         public readonly Button NewPreset,EditPreset,DeletePreset,NewShortcut,EditShortcut,DeleteShortcut;
         public readonly Button CopyDiagnosticsButton;
+        internal bool DataLoaded { get; private set; }
+        internal void SetDataLoaded(bool loaded) {
+            DataLoaded=loaded;
+            ExitPolicy.Enabled=Monitors.Enabled=Presets.Enabled=Shortcuts.Enabled=loaded;
+            NewPreset.Enabled=EditPreset.Enabled=DeletePreset.Enabled=loaded;
+            NewShortcut.Enabled=EditShortcut.Enabled=DeleteShortcut.Enabled=CopyDiagnosticsButton.Enabled=loaded;
+        }
         readonly Label diagnosticsStatus;
         readonly System.Windows.Forms.Timer diagnosticsTimer=new System.Windows.Forms.Timer();
         Font aliasEditorFont;
@@ -434,26 +473,39 @@ try {
         MonitorBrightness[] displays=new MonitorBrightness[0];
         string selectedId;
         bool updatingPicker;
+        Size pageSize;
+        readonly Panel footer;
+        internal readonly Panel AutomaticOffNotice;
+        internal readonly DialogButton EnableAutomatic=new DialogButton {Text="Enable auto-switching",Dock=DockStyle.Right,Width=182};
+        readonly Panel hdrOffNotice;
+        readonly DialogButton enableHdr=new DialogButton {Text="Enable HDR",Dock=DockStyle.Right,Width=182};
+        readonly string settingsKey;
+        const string PlacementValue="SettingsWindowPlacement";
 
-        public SettingsForm() {
-            ProfileUi.Initialize(this,"HDR Control settings",904,664,true);
+        public SettingsForm() : this(@"HKEY_CURRENT_USER\Software\HdrContextMenu") { }
+        internal SettingsForm(string settingsKey) {
+            this.settingsKey=settingsKey;
+            ProfileUi.Initialize(this,"HDR Control settings",904,664);
+            MaximizeBox=false;
             Padding=new Padding(12,12,12,0);
-            var footer=CreateSettingsFooter();
+            footer=CreateSettingsFooter();
             var actionSpace=new Size(footer.ClientSize.Width-148,footer.Height);
             var gameActions=new Panel {Size=actionSpace,Anchor=AnchorStyles.Top|AnchorStyles.Left|AnchorStyles.Right,Visible=false};
             var profileActions=new Panel {Size=actionSpace,Anchor=gameActions.Anchor,Visible=false};
             footer.Controls.AddRange(new Control[]{gameActions,profileActions});
-            Games=new GameListsForm(gameActions); Profiles=new ProfileSettingsForm(profileActions);
+            Games=new GameListsForm(gameActions,settingsKey); Profiles=new ProfileSettingsForm(profileActions);
             GameSaveStatus=new TabSaveStatus(Games); ProfileSaveStatus=new TabSaveStatus(Profiles);
             var content=new Panel {Dock=DockStyle.Fill,AutoScroll=true,TabIndex=0};
             footer.TabIndex=1;
             Sections.Size=new Size(ClientSize.Width-Padding.Horizontal,ClientSize.Height-Padding.Vertical-footer.Height);
             content.Controls.Add(Sections); Controls.Add(content); content.BringToFront();
             Load+=delegate {
-                var area=Screen.FromControl(this).WorkingArea;
-                Size=new Size(Math.Min(Width,area.Width),Math.Min(Height,area.Height));
-                if(StartPosition==FormStartPosition.CenterScreen)
-                    Location=new Point(area.Left+(area.Width-Width)/2,area.Top+(area.Height-Height)/2);
+                // Dock to the scrollable display area so a vertical scrollbar
+                // reduces the page width without also forcing a horizontal bar.
+                pageSize=new Size(Sections.Width-SystemInformation.VerticalScrollBarWidth,Sections.Height);
+                Sections.Dock=DockStyle.Fill;
+                RestorePlacement();
+                LocationChanged+=delegate { UpdateResizeLimit(); };
             };
             var brightness=new Panel {Text="SDR brightness"};
             var games=new Panel {Text="Game lists"};
@@ -472,19 +524,28 @@ try {
             brightnessBody.Controls.Add(empty);
             brightness.Controls.Add(brightnessBody); brightness.Controls.Add(displayBar);
             DialogTheme.Apply(this);
+            AutomaticOffNotice=AddNotice(games,"Auto-switching is off. Game detection is paused.",EnableAutomatic);
+            hdrOffNotice=AddNotice(brightness,"HDR is off. Enable HDR to adjust SDR brightness.",enableHdr);
+            enableHdr.Click+=delegate {
+                enableHdr.Enabled=false;
+                Request("EnableHdr",selectedId);
+            };
             Games.Embed(games); Profiles.Embed(profiles);
+            Games.BringToFront();
+            EnableAutomatic.Click+=delegate {
+                EnableAutomatic.Enabled=false;
+                Request("EnableAutomatic",null);
+            };
             Games.UseCommunityApps.Click+=delegate {
                 Games.UseCommunityApps.Enabled=false;
                 Request("SetCommunityApps",Games.UseCommunityApps.Checked);
             };
-            Profiles.Enabled=false;
-            Profiles.EnabledChanged+=delegate { profileActions.Enabled=Profiles.Enabled; };
-            profileActions.Enabled=Profiles.Enabled;
+            Profiles.SetDataLoaded(false);
             Sections.SelectedIndexChanged+=delegate {
                 gameActions.Visible=Sections.SelectedIndex==1;
                 profileActions.Visible=Sections.SelectedIndex==2;
                 if(Sections.SelectedIndex!=0 && Brightness!=null) Brightness.CommitEdits();
-                if(Sections.SelectedIndex==2 && !Profiles.Enabled) Request("LoadProfiles",null);
+                if(Sections.SelectedIndex==2 && !Profiles.DataLoaded) Request("LoadProfiles",null);
             };
             Profiles.ExitPolicy.SelectedIndexChanged+=delegate { SaveGeneralSettings(); };
             Profiles.Monitors.CellValueChanged+=delegate(object sender,DataGridViewCellEventArgs e) {
@@ -512,10 +573,71 @@ try {
                 if(Brightness!=null) Brightness.CommitEdits();
                 Profiles.Monitors.EndEdit(); Games.CommitPendingClicks();
             };
+            FormClosed+=delegate {
+                if(settingsKey==null || StartPosition==FormStartPosition.Manual) return;
+                var bounds=WindowState==FormWindowState.Normal ? Bounds : RestoreBounds;
+                try {
+                    Registry.SetValue(settingsKey,PlacementValue,new string[]{bounds.X.ToString(),bounds.Y.ToString(),bounds.Height.ToString(),bounds.Width.ToString()},RegistryValueKind.MultiString);
+                } catch(UnauthorizedAccessException) { } catch(System.Security.SecurityException) { } catch(IOException) { }
+            };
             SetDisplays(displays);
         }
+        static Panel AddNotice(Panel page,string message,DialogButton action) {
+            var notice=new Panel {Dock=DockStyle.Top,Height=46,Padding=new Padding(12,5,12,5),Visible=false};
+            var label=new Label {Text=message,Dock=DockStyle.Fill,TextAlign=ContentAlignment.MiddleLeft};
+            notice.Controls.Add(label); notice.Controls.Add(action);
+            page.Controls.Add(notice);
+            DialogTheme.Apply(notice);
+            notice.BackColor=label.BackColor=DialogTheme.Surface;
+            label.ForeColor=Color.FromArgb(255,215,138);
+            return notice;
+        }
+        void UpdateResizeLimit() {
+            if(pageSize.IsEmpty || Disposing) return;
+            var area=Screen.FromControl(this).WorkingArea;
+            var previous=Size;
+            UpdateResizeLimit(area.Size);
+            if(Size!=previous && StartPosition!=FormStartPosition.Manual)
+                Location=new Point(Math.Max(area.Left,Math.Min(Left,area.Right-Width)),Math.Max(area.Top,Math.Min(Top,area.Bottom-Height)));
+        }
+        void UpdateResizeLimit(Size workArea) {
+            int height=pageSize.Height;
+            if(Brightness!=null) {
+                int editorHeight=Brightness.SettingsColumns.Height;
+                height=Math.Max(height,Sections.TabPages[0].Top+DisplayPicker.Parent.Bottom+editorHeight);
+            }
+            var content=(Panel)Sections.Parent;
+            content.AutoScrollMinSize=new Size(pageSize.Width,height);
+            var minimum=SizeFromClientSize(new Size(pageSize.Width+Padding.Horizontal,height+Padding.Vertical+footer.Height));
+            // On a smaller monitor, leave room for the one unavoidable scrollbar.
+            if(minimum.Height>workArea.Height) minimum.Width+=SystemInformation.VerticalScrollBarWidth;
+            if(minimum.Width>workArea.Width) minimum.Height+=SystemInformation.HorizontalScrollBarHeight;
+            MinimumSize=new Size(Math.Min(minimum.Width,workArea.Width),Math.Min(minimum.Height,workArea.Height));
+        }
+        void RestorePlacement() {
+            string[] saved=null;
+            if(settingsKey!=null && StartPosition!=FormStartPosition.Manual) {
+                try { saved=Registry.GetValue(settingsKey,PlacementValue,null) as string[]; }
+                catch(UnauthorizedAccessException) { } catch(System.Security.SecurityException) { } catch(IOException) { }
+            }
+            int x=0,y=0,height=0;
+            bool restore=saved!=null && (saved.Length==3 || saved.Length==4) && int.TryParse(saved[0],out x) &&
+                int.TryParse(saved[1],out y) && int.TryParse(saved[2],out height) && height>0;
+            var area=(restore ? Screen.FromPoint(new Point(x,y)) : Screen.FromControl(this)).WorkingArea;
+            int width=Math.Min(Width,area.Width);
+            UpdateResizeLimit(area.Size);
+            int savedWidth;
+            if(restore && saved.Length==4 && int.TryParse(saved[3],out savedWidth) && savedWidth>0)
+                width=Math.Max(MinimumSize.Width,Math.Min(savedWidth,area.Width));
+            if(!restore) height=Math.Max(Height,area.Height*85/100);
+            Size=new Size(width,Math.Max(MinimumSize.Height,Math.Min(height,area.Height)));
+            if(StartPosition==FormStartPosition.Manual) return;
+            Location=restore
+                ? new Point(Math.Max(area.Left,Math.Min(x,area.Right-Width)),Math.Max(area.Top,Math.Min(y,area.Bottom-Height)))
+                : new Point(area.Left+(area.Width-Width)/2,area.Top+(area.Height-Height)/2);
+        }
         void SaveGeneralSettings() {
-            if(!Profiles.Enabled) return;
+            if(!Profiles.DataLoaded) return;
             var monitors=new List<MonitorAlias>();
             foreach(DataGridViewRow row in Profiles.Monitors.Rows) {
                 var monitor=(MonitorAlias)row.Tag;
@@ -539,6 +661,10 @@ try {
             Sections.SelectedIndex=0;
             RefreshBrightness();
         }
+        internal void SetAutomaticSwitching(bool enabled) {
+            AutomaticOffNotice.Visible=!enabled;
+            EnableAutomatic.Enabled=true;
+        }
         public void SetDisplays(MonitorBrightness[] current) {
             displays=current;
             updatingPicker=true;
@@ -557,6 +683,8 @@ try {
             try { DisplayPicker.SelectedIndex=index; DisplayPicker.Enabled=displays.Length>0; }
             finally { updatingPicker=false; }
             var d=index<0 ? null : displays[index];
+            hdrOffNotice.Visible=d!=null && d.HdrOff;
+            enableHdr.Enabled=d!=null && d.HdrOff && !d.Busy;
             if(Brightness!=null && (d==null || Brightness.DisplayId!=d.DisplayId || Brightness.PreferenceKey!=d.PreferenceKey)) {
                 Brightness.CommitEdits();
                 Brightness.Dispose(); Brightness=null;
@@ -564,6 +692,7 @@ try {
             empty.Visible=d==null;
             if(d==null) {
                 empty.Text=displays.Length==0 ? "Connect an HDR-capable display to adjust SDR brightness." : "This display is disconnected. Choose another display above.";
+                UpdateResizeLimit();
                 return;
             }
             if(Brightness==null) {
@@ -577,8 +706,11 @@ try {
                 Brightness=editor;
                 editor.UseSettingsLayout();
                 editor.Embed(brightnessBody);
+                editor.SettingsColumns.SizeChanged+=delegate { UpdateResizeLimit(); };
+                UpdateResizeLimit();
             }
             d.Refresh(Brightness);
+            UpdateResizeLimit();
         }
     }
 
@@ -600,6 +732,7 @@ try {
         sealed class Request {
             public int Action;
             public string Executable;
+            public string[] Games;
             public bool? Enabled;
             public string Command;
             public object Data;
@@ -607,7 +740,7 @@ try {
         }
         public readonly ActionButton RefreshButton=new ActionButton(),UpdateCommunityButton=new ActionButton(),EditCustomButton=new ActionButton(),
             AddRunningButton=new ActionButton(),AddGameButton=new ActionButton(),EditRuleButton=new ActionButton(),LaunchButton=new ActionButton(),ShortcutButton=new ActionButton(),RemoveButton=new ActionButton();
-        public event Action<string,bool> EnableRequested;
+        public event Action<string[],bool> EnableRequested;
         public event Action<string,object> CommandRequested;
         // The tray calls this only after persistence succeeds. A delayed operation can
         // retain its own callback across dispatches, including closing/reopening settings.
@@ -619,6 +752,7 @@ try {
         public string ActiveBrightnessId { get { return IsDisposed ? null : activeBrightnessId; } }
 
         public void SelectDisplay(string id) { updates.Enqueue(window=>window.SelectDisplay(id)); }
+        public void SetAutomaticSwitching(bool enabled) { updates.Enqueue(window=>window.SetAutomaticSwitching(enabled)); }
         public void SetCommunityApps(bool enabled) {
             updates.Enqueue(window=>{
                 window.Games.UseCommunityApps.Checked=enabled;
@@ -635,11 +769,11 @@ try {
         public void SetGeneral(int exitPolicy,MonitorAlias[] monitors) {
             updates.Enqueue(window=>{
                 var profile=window.Profiles;
-                if(profile.Enabled) return; // A second tab visit can queue a duplicate initial load.
+                if(profile.DataLoaded) return; // A second tab visit can queue a duplicate initial load.
                 profile.ExitPolicy.SelectedIndex=exitPolicy;
                 profile.Monitors.Rows.Clear();
                 foreach(var m in monitors) profile.AddMonitor(m);
-                profile.Enabled=true;
+                profile.SetDataLoaded(true);
             });
         }
         public void SetProfileLists(DisplayChoice[] presets,DisplayChoice[] shortcuts) {
@@ -657,7 +791,8 @@ try {
         readonly System.Windows.Forms.Timer dispatchTimer=new System.Windows.Forms.Timer();
         readonly System.Collections.Concurrent.ConcurrentQueue<Request> requests=new System.Collections.Concurrent.ConcurrentQueue<Request>();
         readonly System.Collections.Generic.List<Row> pendingRows=new System.Collections.Generic.List<Row>();
-        volatile Row[] snapshot=new Row[0];
+        static readonly Row[] emptyRows=new Row[0];
+        volatile Row[] snapshot=emptyRows;
         volatile string selectedExecutable="";
         string requestExecutable;
         volatile bool disposed,finished;
@@ -685,7 +820,7 @@ try {
                 dispatching=true; requestExecutable=request.Executable;
                 SaveConfirmation=request.ConfirmSave;
                 try {
-                    if(request.Enabled.HasValue) {if(EnableRequested!=null) EnableRequested(request.Executable,request.Enabled.Value);}
+                    if(request.Enabled.HasValue) {if(EnableRequested!=null) EnableRequested(request.Games,request.Enabled.Value);}
                     else if(request.Command!=null) { if(CommandRequested!=null) CommandRequested(request.Command,request.Data); }
                     else actions[request.Action].Raise();
                 }
@@ -730,25 +865,28 @@ try {
                         }
                         requests.Enqueue(request);
                     };
-                    var buttons=new Button[]{form.RefreshButton,form.UpdateCommunityButton,form.EditCustomButton,form.AddRunningButton,form.AddGameButton,form.EditRuleButton,form.LaunchButton,form.ShortcutButton,form.RemoveButton};
-                    form.EnableRequested+=delegate(string exe,bool enabled) {
+                    var buttons=new Button[]{form.RefreshButton,form.UpdateCommunityButton,form.EditCustomButton,form.AddRunningButton,form.AddGameButton};
+                    var menuItems=new ToolStripMenuItem[]{form.EditRuleButton,form.LaunchButton,form.ShortcutButton,form.RemoveButton};
+                    form.EnableRequested+=delegate(string[] games,bool enabled) {
                         Interlocked.Increment(ref pendingToggles);
-                        var request=new Request {Executable=exe,Enabled=enabled};
+                        var request=new Request {Games=games,Enabled=enabled};
                         TrackSave(request,window.GameSaveStatus,true);
                         requests.Enqueue(request);
                     };
-                    for(int i=0;i<buttons.Length;i++) {
+                    for(int i=0;i<actions.Length;i++) {
                         int index=i;
-                        buttons[i].Click+=delegate {
+                        EventHandler click=delegate {
                             if(Interlocked.CompareExchange(ref busy,1,0)!=0) return;
                             form.AllowToggle=false;
                             var request=new Request {Action=index,Executable=form.SelectedExecutable};
-                            if(buttons[index]!=form.RefreshButton && buttons[index]!=form.EditCustomButton)
+                            if(actions[index]!=RefreshButton && actions[index]!=EditCustomButton)
                                 TrackSave(request,window.GameSaveStatus,false);
                             requests.Enqueue(request);
                         };
+                        if(i<buttons.Length) buttons[i].Click+=click;
+                        else menuItems[i-buttons.Length].Click+=click;
                     }
-                    Row[] displayed=null;
+                    Row[] displayed=emptyRows;
                     Action apply=delegate {
                         if(disposed) {window.Close();return;}
                         Action<SettingsForm> update;
@@ -763,12 +901,18 @@ try {
                         }
                         selectedExecutable=form.SelectedExecutable;
                         form.AllowToggle=Volatile.Read(ref busy)==0;
-                        for(int i=0;i<buttons.Length;i++) {
-                            bool enabled=actions[i].Enabled && Interlocked.CompareExchange(ref busy,0,0)==0 && (i<5 || selectedExecutable.Length>0);
-                            if(buttons[i]==form.RemoveButton) enabled=enabled && form.CanRemoveSelected;
-                            if(buttons[i].Enabled!=enabled) buttons[i].Enabled=enabled;
+                        for(int i=0;i<actions.Length;i++) {
+                            bool enabled=actions[i].Enabled && form.AllowToggle;
                             string text=actions[i].Text;
-                            if(text.Length>0 && buttons[i].Text!=text) buttons[i].Text=text;
+                            if(i<buttons.Length) {
+                                if(buttons[i].Enabled!=enabled) buttons[i].Enabled=enabled;
+                                if(text.Length>0 && buttons[i].Text!=text) buttons[i].Text=text;
+                            } else {
+                                var item=menuItems[i-buttons.Length];
+                                enabled=enabled && selectedExecutable.Length>0 && (item!=form.RemoveButton || form.CanRemoveSelected);
+                                if(item.Enabled!=enabled) item.Enabled=enabled;
+                                if(text.Length>0 && item.Text!=text) item.Text=text;
+                            }
                         }
                         if(Interlocked.Exchange(ref activate,0)!=0) {
                             if(window.WindowState==FormWindowState.Minimized) window.WindowState=FormWindowState.Normal;
@@ -776,12 +920,12 @@ try {
                         }
                     };
                     timer.Tick+=delegate {apply();};
-                    window.Shown+=delegate {handle=window.Handle; apply(); timer.Start();};
+                    window.Shown+=delegate {
+                        handle=window.Handle;
+                        apply(); timer.Start();
+                        if(Object.ReferenceEquals(snapshot,emptyRows)) requests.Enqueue(new Request {Command="LoadGames"});
+                    };
                     if(disposed) return;
-                    // Populate before revealing the first frame.
-                    form.ClearRows(); Row[] initial=snapshot;
-                    foreach(var row in initial) row.AddTo(form);
-                    form.FinishRows(); displayed=initial;
                     Application.Run(window);
                 }
             } catch(Exception error) {Error=error;}

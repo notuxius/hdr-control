@@ -1,8 +1,8 @@
-﻿# Loaded by the existing Watch action after the display API is initialized.
+# Loaded by the existing Watch action after the display API is initialized.
 Add-Type -AssemblyName System.Windows.Forms, System.Drawing
 . (Join-Path $PSScriptRoot 'Update-HdrApp.ps1') -FunctionsOnly
 if (-not ('LocalHdrMenu.TrayMenuTheme' -as [type])) {
-    Add-Type -Path @((Join-Path $PSScriptRoot 'TrayTheme.cs'),(Join-Path $PSScriptRoot 'ProfilesUi.cs')) -ReferencedAssemblies System.Windows.Forms,System.Drawing
+    Add-Type -Path @((Join-Path $PSScriptRoot 'TrayTheme.cs'),(Join-Path $PSScriptRoot 'ProfilesUi.cs')) -ReferencedAssemblies System.Windows.Forms,System.Drawing,UIAutomationProvider,UIAutomationTypes,WindowsBase
 }
 
 [LocalHdrMenu.BrightnessLocation]::HelperPath = Join-Path $PSScriptRoot 'HDR Control.exe'
@@ -11,10 +11,13 @@ if ($null -eq [LocalHdrMenu.DialogForm]::ApplicationIcon) {
 }
 
 . (Join-Path $PSScriptRoot 'HdrProfiles.ps1')
+. (Join-Path $PSScriptRoot 'HdrStartup.ps1')
 
 $script:hdrBrightnessHistoryPath = 'HKCU:\Software\HdrContextMenu\SdrBrightness\LastUsed'
 
-function Show-HdrNotification([string]$Message) {
+$script:hdrUpdateSettingsKey = 'HKEY_CURRENT_USER\Software\HdrContextMenu'
+
+function Show-HdrNotification([string]$Message, [switch]$OpenAbout, [string]$InstallVersion) {
     try {
         # NotifyIcon balloons inherit the PowerShell host's sender name.
         # Register and address our own sender in the interactive user's session.
@@ -28,8 +31,28 @@ function Show-HdrNotification([string]$Message) {
             $script:hdrNotifier = [Windows.UI.Notifications.ToastNotificationManager, Windows.UI.Notifications, ContentType=WindowsRuntime]::CreateToastNotifier($appId)
         }
         $xml = [Windows.Data.Xml.Dom.XmlDocument, Windows.Data.Xml.Dom.XmlDocument, ContentType=WindowsRuntime]::new()
-        $xml.LoadXml('<toast><visual><binding template="ToastGeneric"><text>HDR Control</text><text/></binding></visual></toast>')
-        $xml.GetElementsByTagName('text').Item(1).InnerText = $Message
+        $xml.LoadXml('<toast><visual><binding template="ToastGeneric"/></visual></toast>')
+        if ($OpenAbout -or $InstallVersion) {
+            $launch = 'notuxius-hdr-control:about'
+            if ($InstallVersion) {
+                # Only a link issued for this user's offered release can start the updater.
+                $offer = [string][Microsoft.Win32.Registry]::GetValue($script:hdrUpdateSettingsKey,'UpdateOffer','')
+                $id,$version = $offer -split '/',2
+                if ($version -cne $InstallVersion -or $id -cnotmatch '^[a-f0-9]{32}$') {
+                    $id = [Guid]::NewGuid().ToString('N')
+                    [Microsoft.Win32.Registry]::SetValue($script:hdrUpdateSettingsKey,'UpdateOffer',"$id/$InstallVersion")
+                }
+                $launch = "notuxius-hdr-control:install/$id"
+            }
+            $xml.DocumentElement.SetAttribute('activationType','protocol')
+            $xml.DocumentElement.SetAttribute('launch',$launch)
+        }
+        $binding=$xml.GetElementsByTagName('binding').Item(0)
+        foreach ($line in ($Message -split '\r?\n',2)) {
+            $text=$xml.CreateElement('text')
+            $text.InnerText=$line
+            [void]$binding.AppendChild($text)
+        }
         $script:hdrNotifier.Show([Windows.UI.Notifications.ToastNotification, Windows.UI.Notifications, ContentType=WindowsRuntime]::new($xml))
     } catch { Write-HdrDiagnostic 'NOTIFICATION' ($Message + ': ' + $_.Exception.Message) }
 }
@@ -246,7 +269,7 @@ function Get-HdrBrightnessDisplays($Displays) {
         $item.Busy=$busy
         $item.Saving=$busy -and $script:hdrTray.BrightnessPending.Edit.DisplayId -ceq $d.DisplayId
         $item.Status=if ($busy) { 'Waiting for the display change to finish...' }
-            elseif (-not $d.HdrEnabled) { 'Enable HDR on this monitor to adjust SDR brightness.' }
+            elseif (-not $d.HdrEnabled) { '' }
             elseif (-not $available) { 'SDR brightness is unavailable on this display or Windows version.' }
             else { 'Current Windows level: {0}%. Changes save automatically.' -f [Math]::Round(($d.SdrWhiteLevel-1000)/50.0,[MidpointRounding]::AwayFromZero) }
         $item
@@ -385,18 +408,26 @@ function Set-HdrAutomationPreference([ValidateSet('AutomaticHdr','UseCommunityAp
 }
 
 function Set-HdrAutomaticMenuState([bool]$Enabled) {
+    if ($script:hdrTray.Automatic.Checked -ne $Enabled -and $null -ne $script:hdrTray.SettingsWindow -and -not $script:hdrTray.SettingsWindow.IsDisposed) {
+        $script:hdrTray.SettingsWindow.SetAutomaticSwitching($Enabled)
+        Update-HdrGameListsPanel
+    }
     $script:hdrTray.Automatic.Checked = $Enabled
     $script:hdrTray.Automatic.Text = if ($Enabled) { 'Disable auto-switching' } else { 'Enable auto-switching' }
 }
 
-function Switch-HdrAutomaticHdr {
+function Switch-HdrAutomaticHdr([switch]$Enable) {
     try {
-        $enabled = -not (Get-HdrAutomationPreference 'AutomaticHdr')
-        Set-HdrAutomationPreference 'AutomaticHdr' $enabled
-        # Pausing releases control without changing the user's current HDR state.
-        $script:hdrTray.Automation = New-HdrAutomationState
-        if ($enabled -or $script:hdrTray.Launches.Count) { Set-HdrDecision 'Checking apps' }
-        else { Set-HdrDecision 'Automatic HDR is paused' }
+        $current = Get-HdrAutomationPreference 'AutomaticHdr'
+        $enabled = $Enable -or -not $current
+        if ($current -ne $enabled) {
+            Set-HdrAutomationPreference 'AutomaticHdr' $enabled
+            # Pausing releases control without changing the user's current HDR state.
+            $script:hdrTray.Automation = New-HdrAutomationState
+            if ($enabled -or $script:hdrTray.Launches.Count) { Set-HdrDecision 'Checking apps' }
+            else { Set-HdrDecision 'Automatic HDR is paused' }
+            Show-HdrNotification $(if ($enabled) { 'Automatic HDR switching is enabled.' } else { 'Automatic HDR switching is disabled.' })
+        }
     } catch {
         Show-HdrNotification 'The automatic HDR preference could not be saved.'
     }
@@ -628,18 +659,92 @@ function Get-HdrAppListState([switch]$IncludeDisabledDefaults) {
 
 function Get-HdrWatchedApps { return (Get-HdrAppListState).Effective }
 
+function Get-HdrInstalledExecutableNames {
+    $locations = @('HKCU:\SOFTWARE','HKLM:\SOFTWARE','HKLM:\SOFTWARE\WOW6432Node')
+    $roots = @(foreach ($location in $locations) {
+        $base = "$location\Microsoft\Windows\CurrentVersion"
+        foreach ($app in Get-ItemProperty "$base\Uninstall\*" -ErrorAction SilentlyContinue) {
+            if ($app.InstallLocation) { $app.InstallLocation }
+        }
+    })
+    $manifests = Join-Path $env:ProgramData 'Epic\EpicGamesLauncher\Data\Manifests'
+    $roots += @(foreach ($item in Get-ChildItem -LiteralPath $manifests -Filter '*.item' -ErrorAction SilentlyContinue) {
+        try {
+            $game = [IO.File]::ReadAllText($item.FullName) | ConvertFrom-Json -ErrorAction Stop
+            if (-not $game.bIsIncompleteInstall -and $game.InstallLocation) { $game.InstallLocation }
+        } catch { continue }
+    })
+    foreach ($location in $locations) {
+        foreach ($app in Get-ItemProperty "$location\Microsoft\Windows\CurrentVersion\App Paths\*" -ErrorAction SilentlyContinue) {
+            $path = [Environment]::ExpandEnvironmentVariables([string]$app.'(default)').Trim('"')
+            if ([IO.File]::Exists($path)) { [IO.Path]::GetFileName($path) }
+        }
+    }
+    $pending = [Collections.Generic.Stack[string]]::new()
+    $seen = @{}
+    foreach ($root in $roots) {
+        $path = [Environment]::ExpandEnvironmentVariables($root.Trim().Trim('"')).TrimEnd('\')
+        # Only walk specific local install directories, never a whole drive or system folder.
+        if ($path -notmatch '^[A-Za-z]:\\' -or $path -in @($env:ProgramFiles,${env:ProgramFiles(x86)},$env:USERPROFILE,$env:LOCALAPPDATA,$env:ProgramData) -or
+            $path -eq $env:SystemRoot -or $path.StartsWith("$env:SystemRoot\",[StringComparison]::OrdinalIgnoreCase)) { continue }
+        $pending.Push($path)
+    }
+    while ($pending.Count) {
+        $path = $pending.Pop()
+        if ($seen.ContainsKey($path)) { continue }
+        $seen[$path] = $true
+        try {
+            if ([IO.File]::GetAttributes($path) -band [IO.FileAttributes]::ReparsePoint) { continue }
+            foreach ($file in [IO.Directory]::EnumerateFiles($path,'*.exe')) { [IO.Path]::GetFileName($file) }
+            foreach ($dir in [IO.Directory]::EnumerateDirectories($path)) { $pending.Push($dir) }
+        } catch [IO.IOException] { continue } catch [UnauthorizedAccessException] { continue }
+    }
+}
+
+function Start-HdrInstalledScan {
+    if ($script:hdrTray.InstalledScan) { return }
+    $worker = [PowerShell]::Create()
+    try {
+        [void]$worker.AddScript(${function:Get-HdrInstalledExecutableNames}.ToString())
+        $script:hdrTray.InstalledScan = @{ Worker=$worker; Result=$worker.BeginInvoke() }
+    } catch { $worker.Dispose(); throw }
+}
+
+function Complete-HdrInstalledScan {
+    $scan = $script:hdrTray.InstalledScan
+    if (-not $scan -or -not $scan.Result.IsCompleted) { return }
+    $script:hdrTray.InstalledScan = $null
+    try {
+        $found = @{}
+        foreach ($name in $scan.Worker.EndInvoke($scan.Result)) {
+            if ($name.EndsWith('.exe',[StringComparison]::OrdinalIgnoreCase)) {
+                $found[[IO.Path]::GetFileNameWithoutExtension($name)] = $true
+            }
+        }
+        $script:hdrTray.InstalledApps = $found
+    } catch { Write-HdrDiagnostic 'GAME LISTS' $_.Exception.Message }
+    finally { $scan.Worker.Dispose() }
+    Update-HdrGameListsPanel
+}
+
 function Get-HdrGameListRows {
     $lists = Get-HdrAppListState -IncludeDisabledDefaults
     $detected = Read-HdrDetectedApps
     $all = @{}
-    foreach ($map in @($lists.Defaults,$lists.Custom,$lists.Excluded,$detected)) {
+    $installed = @{}
+    foreach ($name in Get-HdrRunningAppNames) { $installed[$name] = $true }
+    if ($script:hdrTray.InstalledApps) {
+        foreach ($key in $script:hdrTray.InstalledApps.Keys) { $installed[$key] = $true }
+    }
+    foreach ($key in $installed.Keys) { if ($lists.Defaults.ContainsKey($key)) { $all[$key] = $true } }
+    foreach ($map in @($lists.Custom,$lists.Excluded,$detected)) {
         foreach ($key in $map.Keys) { $all[$key] = $true }
     }
     $automatic = Get-HdrAutomationPreference 'AutomaticHdr'
     foreach ($key in @($all.Keys | Sort-Object)) {
         $section = if ($detected.ContainsKey($key)) { 'Auto-detected' }
-            elseif ($lists.DefaultOverrides.ContainsKey($key)) { 'Defaults' }
-            elseif ($lists.Custom.ContainsKey($key) -or $lists.Excluded.ContainsKey($key)) { 'Custom' } else { 'Defaults' }
+            elseif ($lists.DefaultOverrides.ContainsKey($key) -and $installed.ContainsKey($key)) { 'Installed' }
+            elseif ($lists.Custom.ContainsKey($key) -or $lists.Excluded.ContainsKey($key)) { 'Custom' } else { 'Installed' }
         $status = if ($lists.Excluded.ContainsKey($key)) { 'Excluded by custom list' }
             elseif (-not $lists.Effective.ContainsKey($key)) {
                 if ($lists.Defaults.ContainsKey($key)) { 'Defaults disabled' } else { 'No longer in defaults' }
@@ -657,17 +762,25 @@ function Get-HdrGameListRows {
     }
 }
 
-function Set-HdrGameEnabled([string]$Executable,[bool]$Enabled) {
-    $key=ConvertTo-HdrAppKey $Executable
+function Set-HdrGameEnabled([string[]]$Executable,[bool]$Enabled) {
     $profiles=Read-HdrProfiles
-    $rule=$profiles.Rules | Where-Object { (ConvertTo-HdrAppKey $_.Executable) -eq $key }
-    if ($null -eq $rule) {
-        $rule=New-HdrGameRule $Executable
-        # A checkbox on a default should remain in place so it can be checked again.
-        $rule | Add-Member NoteProperty KeepInDefaults $true
-        $profiles.Rules+=@($rule)
+    $byName=@{}
+    foreach ($rule in $profiles.Rules) { $byName[(ConvertTo-HdrAppKey $rule.Executable)]=$rule }
+    $newRules=@(foreach ($name in $Executable) {
+        $key=ConvertTo-HdrAppKey $name
+        $rule=$byName[$key]
+        if ($null -eq $rule) {
+            $rule=New-HdrGameRule $name
+            # A checkbox on a default should remain in place so it can be checked again.
+            $rule | Add-Member NoteProperty KeepInDefaults $true
+            $byName[$key]=$rule
+            $rule
+        }
+        $rule.Enabled=$Enabled
+    })
+    if ($newRules.Count) {
+        $profiles.Rules+= $newRules
     }
-    $rule.Enabled=$Enabled
     Save-HdrProfiles $profiles
 }
 
@@ -698,6 +811,8 @@ function Update-HdrGameListsPanel {
     $panel = $script:hdrTray.SettingsWindow
     if ($null -eq $panel -or $panel.IsDisposed) { return }
     try {
+        $panel.RefreshButton.Enabled = -not $script:hdrTray.InstalledScan
+        $panel.RefreshButton.Text = if ($script:hdrTray.InstalledScan) { 'Scanning...' } else { 'Refresh' }
         $rows = @(Get-HdrGameListRows)
         $panel.ClearRows()
         foreach ($row in $rows) { $panel.AddRow($row.Section,$row.Executable,$row.Status,$row.Detected,$row.Enabled,$row.CanRemove) }
@@ -708,10 +823,17 @@ function Update-HdrGameListsPanel {
 function Show-HdrAppSettings([string]$DisplayId) {
     if ($null -eq $script:hdrTray.SettingsWindow -or $script:hdrTray.SettingsWindow.IsDisposed) {
         $script:hdrTray.SettingsWindow = [LocalHdrMenu.SettingsWindow]::new()
+        $script:hdrTray.SettingsWindow.SetAutomaticSwitching((Get-HdrAutomationPreference 'AutomaticHdr'))
         $script:hdrTray.SettingsWindow.SetCommunityApps((Get-HdrAutomationPreference 'UseCommunityApps'))
         $script:hdrTray.SettingsWindow.add_CommandRequested({ param($command,$data)
             try {
                 switch ($command) {
+                    'LoadGames' { Start-HdrInstalledScan; Update-HdrGameListsPanel }
+                    'EnableAutomatic' {
+                        try { Switch-HdrAutomaticHdr -Enable }
+                        finally { $script:hdrTray.SettingsWindow.SetAutomaticSwitching((Get-HdrAutomationPreference 'AutomaticHdr')) }
+                    }
+                    'EnableHdr' { if ($data) { Start-HdrChange 'On' ([string]$data) } }
                     'SaveBrightness' { Save-HdrBrightnessPanel $data }
                     'SetCommunityApps' {
                         try { Set-HdrAutomationPreference 'UseCommunityApps' $data }
@@ -734,7 +856,7 @@ function Show-HdrAppSettings([string]$DisplayId) {
             } catch { [void](Show-HdrMessage $_.Exception.Message) }
         })
         $script:hdrTray.SettingsWindow.add_Failed({ param($sender,$eventArgs) [void](Show-HdrMessage $sender.Error.Message) })
-        $script:hdrTray.SettingsWindow.RefreshButton.add_Click({ Update-HdrGameListsPanel })
+        $script:hdrTray.SettingsWindow.RefreshButton.add_Click({ Start-HdrInstalledScan; Update-HdrGameListsPanel })
         $script:hdrTray.SettingsWindow.UpdateCommunityButton.add_Click({ Start-HdrCommunityUpdate })
         $script:hdrTray.SettingsWindow.EditCustomButton.add_Click({ Edit-HdrCustomApps })
         $script:hdrTray.SettingsWindow.AddRunningButton.add_Click({ Show-HdrRunningApps })
@@ -760,7 +882,7 @@ function Show-HdrAppSettings([string]$DisplayId) {
             $prompt="Remove the local entry for ${exe}, including its saved settings and detection history?"
             try {
                 if ((Get-HdrAppListState -IncludeDisabledDefaults).Defaults.ContainsKey((ConvertTo-HdrAppKey $exe))) {
-                    $prompt+="`n`nThis game will return to Defaults and follow the community list setting."
+                    $prompt+="`n`nThis game will follow the community list setting and appear under Installed if found on this PC."
                 }
                 if ((Show-HdrMessage $prompt 'YesNo') -eq [Windows.Forms.DialogResult]::Yes) {
                     Remove-HdrLocalGame $exe
@@ -770,7 +892,6 @@ function Show-HdrAppSettings([string]$DisplayId) {
             Update-HdrGameListsPanel
         })
         Update-HdrCommunityUpdateButton
-        Update-HdrGameListsPanel
     }
     if ($script:hdrTray.DisplayReadError) { Update-HdrBrightnessPanel @() }
     else { Update-HdrBrightnessPanel $script:hdrTray.LastDisplays }
@@ -838,13 +959,6 @@ function Set-HdrTrayState($State) {
     $script:hdrTray.Status.SetCombinedStatus($State.Status, $script:hdrTray.Decision)
     $automatic = Get-HdrAutomationPreference 'AutomaticHdr'
     Set-HdrAutomaticMenuState $automatic
-    $tooltip='HDR Control - '+$State.Status
-    if ($State.IconState -eq 'AutoEnabled') { $tooltip += ' (auto-enabled)' }
-    elseif ($automatic -and $State.Available) { $tooltip += ' (auto-enable on)' }
-    if (-not $State.Available -and $State.Status -ne 'HDR: Temporarily unreadable') {
-        $tooltip=if ($State.Details.Count) { 'HDR Control - Connected displays do not support HDR' } else { 'HDR Control - No active displays connected' }
-    }
-    $script:hdrTray.Icon.Text=$tooltip.Substring(0,[Math]::Min(63,$tooltip.Length))
     $script:hdrTray.Icon.Icon = switch ($State.IconState) {
         { $_ -in 'Enabled','AutoEnabled' } { if ($automatic) { $script:hdrTray.AutoEnabledIcon } else { $script:hdrTray.EnabledIcon } }
         'Disabled' { if ($automatic) { $script:hdrTray.AutoIdleIcon } else { $script:hdrTray.DisabledIcon } }
@@ -928,7 +1042,7 @@ function Set-HdrDisplayCommandsEnabled([bool]$Enabled) {
     }
 }
 
-function Update-HdrTray {
+function Update-HdrTray([switch]$NotifyRefresh) {
     if ($script:hdrTray.Refreshing) { return }
     $script:hdrTray.Refreshing=$true
     try {
@@ -942,15 +1056,38 @@ function Update-HdrTray {
                 Complete-HdrBrightnessChange $succeeded
             } elseif (-not $succeeded) {
                 Show-HdrNotification 'Windows could not change HDR. Check HDR settings and try again.'
+            } elseif ($script:hdrTray.ManualResult) {
+                Show-HdrNotification $script:hdrTray.ManualResult
             }
+            $script:hdrTray.ManualResult=$null
         }
         foreach ($id in @($script:hdrTray.BrightnessEdits.Keys)) {
             if ($null -ne $script:hdrTray.Pending -or $null -ne $script:hdrTray.UpdateProcess -or $null -ne $script:hdrTray.Scene) { break }
             Save-HdrBrightnessPanel $script:hdrTray.BrightnessEdits[$id]
         }
-        $displays = @([LocalHdrMenu.DisplayApi]::Read())
+        try { $displays = @([LocalHdrMenu.DisplayApi]::Read()) }
+        catch {
+            Receive-HdrLaunchRequests -UpdatesOnly
+            if ($NotifyRefresh) { Show-HdrNotification 'Could not refresh displays. Try again.' }
+            throw
+        }
         $script:hdrTray.LastDisplays=$displays
         $script:hdrTray.DisplayReadError=$null
+        # Background reads establish the initial baseline but never consume changes.
+        if ($NotifyRefresh -or $null -eq $script:hdrTray.RefreshDisplayIds) {
+            $ids=@(foreach ($d in $displays) {
+                if ($d.DevicePath) { $d.DevicePath.ToUpperInvariant() } else { $d.DisplayId }
+            })
+            $previous=$script:hdrTray.RefreshDisplayIds
+            $script:hdrTray.RefreshDisplayIds=$ids
+            if ($NotifyRefresh) {
+                $changes=@(if ($null -ne $previous) { Compare-Object $previous $ids -CaseSensitive })
+                $added=@($changes | Where-Object SideIndicator -eq '=>').Count
+                $removed=$changes.Count-$added
+                $total=if ($displays.Count -eq 1) { '1 display connected' } else { "$($displays.Count) displays connected" }
+                Show-HdrNotification "Displays refreshed.`n$added added, $removed removed. $total."
+            }
+        }
         try {
             $profiles=Read-HdrProfiles
             foreach ($d in $displays) { $d.Name=Get-HdrMonitorName $d $profiles }
@@ -1004,23 +1141,13 @@ function Open-HdrSettings([string]$Uri) {
     catch { Show-HdrNotification 'Windows Settings could not be opened.' }
 }
 
-function Get-HdrStartupEnabled {
-    # Other preferences may create the key before StartWithWindows is saved.
-    # Reading a missing value directly throws even with SilentlyContinue in 5.1.
-    $settings = Get-ItemProperty -LiteralPath 'HKCU:\Software\HdrContextMenu' -ErrorAction SilentlyContinue
-    $value = if ($null -ne $settings) { $settings.StartWithWindows } else { $null }
-    return $null -eq $value -or $value -ne 0
-}
-
-function Set-HdrStartupEnabled([bool]$Enabled) {
-    if (-not (Test-Path -LiteralPath 'HKCU:\Software\HdrContextMenu')) {
-        New-Item -Path 'HKCU:\Software\HdrContextMenu' -ErrorAction Stop | Out-Null
-    }
-    New-ItemProperty -LiteralPath 'HKCU:\Software\HdrContextMenu' -Name StartWithWindows -Value ([int]$Enabled) -PropertyType DWord -Force -ErrorAction Stop | Out-Null
-}
-
 function Switch-HdrStartup {
-    try { Set-HdrStartupEnabled (-not (Get-HdrStartupEnabled)) }
+    try {
+        $enabled=-not (Get-HdrStartupEnabled)
+        Set-HdrStartupEnabled $enabled
+        if (-not $enabled) { Show-HdrNotification 'The app will no longer start with Windows.' }
+        elseif (-not (Get-HdrStartupEnabled)) { Show-HdrNotification 'To start with Windows, enable this app in Settings > Apps > Startup.' }
+    }
     catch { Show-HdrNotification 'The startup preference could not be saved.' }
     $script:hdrTray.Startup.Checked = Get-HdrStartupEnabled
 }
@@ -1041,16 +1168,24 @@ function Show-HdrMessage([string]$Text, [Windows.Forms.MessageBoxButtons]$Button
     finally { $dialog.Dispose() }
 }
 
-function Show-HdrAbout {
+function New-HdrAboutWindow {
     $version = Get-HdrInstalledVersion
     $label = if ($version) { $version } else { 'Unknown' }
-    [void](Show-HdrMessage ("HDR Control`nVersion: $label`n`nLeft click: HDR controls`nRight click: Settings and app options`nMiddle click: Toggle HDR`n`nBy notuxius`ngithub.com/notuxius/hdr-control"))
+    return [LocalHdrMenu.DialogMessageForm]::new("Left click: HDR controls`nRight click: Settings and app options`nMiddle click: Toggle HDR", 'OK', $label)
 }
 
-function Start-HdrUpdateCheck {
+function Show-HdrAbout {
+    $window=$script:hdrTray.AboutWindow
+    if ($window.Visible) { $window.Activate(); return }
+    [void]$window.ShowDialog()
+}
+
+function Start-HdrUpdateCheck([switch]$FromNotification) {
     if ($null -ne $script:hdrTray.UpdateCheck -or $null -ne $script:hdrTray.UpdateProcess -or $null -ne $script:hdrTray.CommunityUpdate) { return }
+    $script:hdrTray.AboutWindow.SetUpToDate($false)
     $script:hdrTray.CheckUpdates.Enabled = $false
     $script:hdrTray.CheckUpdates.Text = 'Checking for updates...'
+    $script:hdrTray.CheckFromNotification = $FromNotification.IsPresent
     $script:hdrTray.UpdateCheck = [LocalHdrMenu.UpdateCheck]::new()
     $script:hdrTray.UpdateCheck.Start()
     Update-HdrCommunityUpdateButton
@@ -1067,20 +1202,51 @@ function Complete-HdrUpdateCheck {
         if ($check.Error) { throw $check.Error }
         $installed = Get-HdrInstalledVersion
         $currentVersion = ConvertTo-HdrVersion $installed
-        if ($check.NoRelease) {
-            [void](Show-HdrMessage ("No newer version is available.`nCurrent version: $installed"))
-            return
+        if (-not $check.NoRelease) {
+            $release = $check.Result | ConvertFrom-Json -ErrorAction Stop
+            if ($release.draft -ne $false -or $release.prerelease -ne $false -or $release.tag_name -cnotmatch '^v(.+)$') { throw 'Invalid release response' }
+            $latest = $Matches[1]
+            if ((ConvertTo-HdrVersion $latest) -gt $currentVersion) {
+                $script:hdrTray.AvailableVersion = $latest
+                $script:hdrTray.CheckUpdates.Text = 'Install update'
+                $script:hdrTray.AboutWindow.SetAvailableVersion($latest)
+                $script:hdrTray.CheckedForUpdates = $true
+                if (-not $script:hdrTray.CheckFromNotification) {
+                    Show-HdrNotification "A newer version is available: $latest (installed: $installed).`nClick to install the update." -InstallVersion $latest
+                }
+                return
+            }
         }
-        $release = $check.Result | ConvertFrom-Json -ErrorAction Stop
-        if ($release.draft -ne $false -or $release.prerelease -ne $false -or $release.tag_name -cnotmatch '^v(.+)$') { throw 'Invalid release response' }
-        $latest = $Matches[1]
-        $latestVersion = ConvertTo-HdrVersion $latest
-        if ($latestVersion -le $currentVersion) {
-            [void](Show-HdrMessage ("You have the latest version.`nCurrent version: $installed"))
-        } elseif ((Show-HdrMessage ("A newer version is available: $latest`nCurrent version: $installed`n`nDownload and install it now?") 'YesNo') -eq [Windows.Forms.DialogResult]::Yes) {
-            Start-HdrAppUpdate $latest
+        $script:hdrTray.AvailableVersion = $null
+        Remove-ItemProperty -LiteralPath ('Registry::'+$script:hdrUpdateSettingsKey) -Name UpdateOffer -ErrorAction SilentlyContinue
+        $script:hdrTray.AboutWindow.SetAvailableVersion($null)
+        $script:hdrTray.CheckedForUpdates = $true
+        if ($script:hdrTray.AboutWindow.Visible) { $script:hdrTray.AboutWindow.SetUpToDate($true) }
+        if (-not $script:hdrTray.CheckFromNotification) {
+            if ($check.NoRelease) { Show-HdrNotification "No newer version is available. Current version: $installed." -OpenAbout }
+            else { Show-HdrNotification "You have the latest version ($installed)." -OpenAbout }
         }
     } catch { [void](Show-HdrMessage 'Could not check for updates. Check your internet connection and try again later.') }
+}
+
+function Install-HdrNotificationUpdate([string]$Id) {
+    $offer = [string][Microsoft.Win32.Registry]::GetValue($script:hdrUpdateSettingsKey,'UpdateOffer','')
+    $token,$version = $offer -split '/',2
+    if ($Id -cnotmatch '^[a-f0-9]{32}$' -or $token -cne $Id) { return }
+    if ((ConvertTo-HdrVersion $version) -le (ConvertTo-HdrVersion (Get-HdrInstalledVersion))) { return }
+    if ($null -ne $script:hdrTray.UpdateProcess) { return }
+    if ($null -ne $script:hdrTray.CommunityUpdate) {
+        [void](Show-HdrMessage 'Please wait for the community list update to finish, then click the update notification again.')
+        return
+    }
+    # Ignore a background check that would otherwise overwrite the installer's button state.
+    $script:hdrTray.UpdateCheck = $null
+    $script:hdrTray.AvailableVersion = $version
+    $script:hdrTray.AboutWindow.SetAvailableVersion($version)
+    $script:hdrTray.CheckUpdates.Text = 'Install update'
+    $script:hdrTray.CheckUpdates.Enabled = $true
+    Update-HdrCommunityUpdateButton
+    Start-HdrAppUpdate $version
 }
 
 function Start-HdrAppUpdate([string]$Version) {
@@ -1104,7 +1270,7 @@ function Complete-HdrAppUpdate {
         $script:hdrTray.UpdateProcess.Dispose()
         $script:hdrTray.UpdateProcess = $null
         Update-HdrCommunityUpdateButton
-        $script:hdrTray.CheckUpdates.Text = 'Check for updates'
+        $script:hdrTray.CheckUpdates.Text = if ($script:hdrTray.AvailableVersion) { 'Install update' } else { 'Check for updates' }
         $script:hdrTray.CheckUpdates.Enabled = $true
     }
 }
@@ -1123,7 +1289,15 @@ function Start-HdrChange([string]$NextAction, [string]$DisplayId, [switch]$Autom
         $script:hdrTray.Pending = Start-Process -FilePath (Join-Path $PSHOME 'powershell.exe') -ArgumentList (
             '-NoLogo -NoProfile -NonInteractive -STA -WindowStyle Hidden -ExecutionPolicy Bypass -File "{0}" -Action {1}{2} -FromHelper' -f $installedScript,$NextAction,$targetArgument
         ) -WindowStyle Hidden -PassThru
-        if (-not $Automatic) { Release-HdrAutomationDisplay $DisplayId; Write-HdrDiagnostic 'MANUAL' ('Requested '+$NextAction) }
+        if (-not $Automatic) {
+            if ($NextAction -in 'On','Off') {
+                $state=if ($NextAction -eq 'On') { 'enabled' } else { 'disabled' }
+                $display=$script:hdrTray.LastDisplays | Where-Object { $DisplayId -and $_.DisplayId -ceq $DisplayId } | Select-Object -First 1
+                $script:hdrTray.ManualResult=if ($display.Name) { "HDR $state on $($display.Name)." } else { "HDR $state." }
+            }
+            Release-HdrAutomationDisplay $DisplayId
+            Write-HdrDiagnostic 'MANUAL' ('Requested '+$NextAction)
+        }
         $script:hdrTray.Command.Enabled = $false
         Set-HdrDisplayCommandsEnabled $false
         $script:hdrTray.Command.Text = 'Changing HDR...'
@@ -1191,7 +1365,7 @@ function Initialize-HdrTray {
         EventTimer = New-Object Windows.Forms.Timer
         EventRetries = 0
         HotkeyBindings = @{}
-        CheckUpdates = New-Object Windows.Forms.ToolStripMenuItem('Check for updates')
+        AboutWindow = New-HdrAboutWindow
         About = New-Object Windows.Forms.ToolStripMenuItem('About')
         UpdateCheck = $null
         UpdateProcess = $null
@@ -1210,7 +1384,7 @@ function Initialize-HdrTray {
     $script:hdrTray.DisplayName.Enabled = $false
     $script:hdrTray.Icon.Icon = $script:hdrTray.UnavailableIcon
     $script:hdrTray.Icon.ContextMenuStrip = $null
-    $script:hdrTray.Icon.Text = 'HDR Control'
+    $script:hdrTray.Status.add_TextChanged({ $script:hdrTray.Icon.Text = $script:hdrTray.Status.TrayIconText })
     $script:hdrTray.Menu.ShowImageMargin = $false
     $script:hdrTray.ControlsMenu.ShowImageMargin = $false
     $script:hdrTray.Menu.AnchorIcon = $script:hdrTray.Icon
@@ -1228,7 +1402,6 @@ function Initialize-HdrTray {
     [void]$script:hdrTray.Menu.Items.Add($script:hdrTray.AppSettings)
     [void]$script:hdrTray.Menu.Items.Add((New-Object Windows.Forms.ToolStripSeparator))
     [void]$script:hdrTray.Menu.Items.Add($script:hdrTray.Startup)
-    [void]$script:hdrTray.Menu.Items.Add($script:hdrTray.CheckUpdates)
     [void]$script:hdrTray.Menu.Items.Add($script:hdrTray.About)
     [void]$script:hdrTray.Menu.Items.Add((New-Object Windows.Forms.ToolStripSeparator))
     [void]$script:hdrTray.Menu.Items.Add($script:hdrTray.Exit)
@@ -1244,7 +1417,7 @@ function Initialize-HdrTray {
     $script:hdrTray.Automatic.Name = 'AutoHdrPreference'
     $script:hdrTray.AppSettings.Name = 'AppSettings'
     Set-HdrAutomaticMenuState (Get-HdrAutomationPreference 'AutomaticHdr')
-    $script:hdrTray.CheckUpdates.Name = 'CheckUpdates'
+    $script:hdrTray.CheckUpdates = $script:hdrTray.AboutWindow.CheckUpdates
     $script:hdrTray.About.Name = 'About'
     $script:hdrTray.Displays.DropDown = New-Object LocalHdrMenu.TrayPopupMenu
     $script:hdrTray.Displays.DropDown.ShowActionIcons = $true
@@ -1253,11 +1426,14 @@ function Initialize-HdrTray {
     [LocalHdrMenu.TrayMenuTheme]::Apply($script:hdrTray.Displays.DropDown, $script:hdrTray.MenuFont)
     $script:hdrTray.Command.add_Click({ Start-HdrChange ([string]$script:hdrTray.Command.Tag) })
     $script:hdrTray.Brightness.add_Click({ Show-HdrAppSettings ([string]$script:hdrTray.Brightness.Tag) })
-    $script:hdrTray.Refresh.add_Click({ Update-HdrTray })
+    $script:hdrTray.Refresh.add_Click({ Update-HdrTray -NotifyRefresh })
     $script:hdrTray.Startup.add_Click({ Switch-HdrStartup })
     $script:hdrTray.Automatic.add_Click({ Switch-HdrAutomaticHdr })
     $script:hdrTray.AppSettings.add_Click({ Show-HdrAppSettings })
-    $script:hdrTray.CheckUpdates.add_Click({ Start-HdrUpdateCheck })
+    $script:hdrTray.CheckUpdates.add_Click({
+        if ($script:hdrTray.AvailableVersion) { Start-HdrAppUpdate $script:hdrTray.AvailableVersion }
+        else { Start-HdrUpdateCheck }
+    })
     $script:hdrTray.About.add_Click({ Show-HdrAbout })
     # MouseClick suppresses the second click of a double-click; MouseUp lets
     # every left/right click toggle, including fast consecutive clicks.
@@ -1284,6 +1460,13 @@ function Initialize-HdrTray {
         Complete-HdrUpdateCheck
         Complete-HdrAppUpdate
         Complete-HdrCommunityUpdate
+        Complete-HdrInstalledScan
+        if ($aboutRequest -and $aboutRequest.WaitOne(0)) {
+            [void]$script:hdrTray.EventWindow.BeginInvoke([Action]{
+                if (-not $script:hdrTray.CheckedForUpdates) { Start-HdrUpdateCheck -FromNotification }
+                Show-HdrAbout
+            })
+        }
     })
     $script:hdrTray.EventTimer.Interval=350
     $script:hdrTray.EventWindow.add_DisplayChanged({
@@ -1304,6 +1487,8 @@ function Initialize-HdrTray {
 }
 
 function Close-HdrTray {
+    if ($script:hdrTray.InstalledScan) { $script:hdrTray.InstalledScan.Worker.Dispose() }
+    $script:hdrTray.AboutWindow.Dispose()
     if ($null -ne $script:hdrTray.RunningAppsPicker) { $script:hdrTray.RunningAppsPicker.Dispose() }
     if ($null -ne $script:hdrTray.EventTimer) { $script:hdrTray.EventTimer.Stop(); $script:hdrTray.EventTimer.Dispose() }
     if ($null -ne $script:hdrTray.EventWindow) { $script:hdrTray.EventWindow.Dispose() }

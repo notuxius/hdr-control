@@ -20,14 +20,30 @@ If action = "Startup" Then
     End If
     action = "Watch"
 End If
+Dim openAbout, installOffer, pattern
+If action = "Notification" Then
+    If WScript.Arguments.Count <> 2 Then WScript.Quit 2
+    If WScript.Arguments(1) = "notuxius-hdr-control:about" Then
+        action = "OpenAbout"
+    Else
+        Set pattern = New RegExp
+        pattern.Pattern = "^notuxius-hdr-control:install/([a-f0-9]{32})$"
+        If Not pattern.Test(WScript.Arguments(1)) Then WScript.Quit 2
+        installOffer = pattern.Execute(WScript.Arguments(1))(0).SubMatches(0)
+        action = "Watch"
+    End If
+End If
+openAbout = (action = "OpenAbout")
+If openAbout Then action = "Watch"
 Select Case action
     Case "Toggle", "On", "Off", "Watch", "Sync", "Launch"
     Case Else: WScript.Quit 2
 End Select
 command = Chr(34) & powershell & Chr(34) & " -NoLogo -NoProfile -NonInteractive -STA -WindowStyle Hidden -ExecutionPolicy Bypass -File " & Chr(34) & script & Chr(34) & " -Action " & action
+If openAbout Then command = command & " -OpenAbout"
+If Len(installOffer) > 0 Then command = command & " -InstallOffer " & installOffer
 If action = "Launch" Then
     If WScript.Arguments.Count <> 2 Then WScript.Quit 2
-    Dim pattern
     Set pattern = New RegExp
     pattern.Pattern = "^[a-f0-9]{32}$"
     If Not pattern.Test(WScript.Arguments(1)) Then WScript.Quit 2

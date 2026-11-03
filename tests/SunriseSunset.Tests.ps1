@@ -1,7 +1,7 @@
 # Solar decisions only; no Windows location request or display writes.
 $ErrorActionPreference='Stop'
 Add-Type -AssemblyName System.Windows.Forms,System.Drawing
-Add-Type -Path (Join-Path (Split-Path $PSScriptRoot) 'TrayTheme.cs') -ReferencedAssemblies System.Windows.Forms,System.Drawing
+Add-Type -Path (Join-Path (Split-Path $PSScriptRoot) 'TrayTheme.cs') -ReferencedAssemblies System.Windows.Forms,System.Drawing,UIAutomationProvider,UIAutomationTypes,WindowsBase
 function Assert($Condition,$Message) { if(-not $Condition) { throw $Message } }
 foreach($case in @(
     @('2026-06-21',40.71,-74.01,'Eastern Standard Time',325,1231),
