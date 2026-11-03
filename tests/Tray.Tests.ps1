@@ -32,6 +32,9 @@ function Set-HdrAutomationPreference([string]$Name,[bool]$Enabled) { if ($Name -
 function Get-HdrInstalledVersion { return '1.0.0' }
 function Start-HdrAppUpdate([string]$Version) { $script:offeredVersion = $Version }
 function Show-HdrMessage([string]$Text, $Buttons = 'OK') { $script:lastMessage = $Text; return $script:messageResponse }
+function Start-HdrUpdateCheck { $script:updateRequests++ }
+$script:sendRealNotification=${function:Show-HdrNotification}
+function Show-HdrNotification($Message,[switch]$OpenAbout,[string]$InstallVersion) { $script:lastNotification=$Message; $script:opensAbout=$OpenAbout.IsPresent; $script:notifyVersion=$InstallVersion }
 $script:messageResponse = [Windows.Forms.DialogResult]::No
 $script:testStartup = $true
 function Assert($Condition, [string]$Message) { if (-not $Condition) { throw $Message } }
@@ -40,12 +43,13 @@ function Display([string]$Name, [bool]$Supported, [bool]$Enabled) {
 }
 $script:syncCount=0
 Initialize-HdrTray
+$script:hdrUpdateSettingsKey='HKEY_CURRENT_USER\Software\HdrControlTrayTest-'+[Guid]::NewGuid().ToString('N')
 try {
     Assert ($null -ne $script:hdrTray.ShowMenuMethod) 'Native tray popup method unavailable'
     Assert ($null -eq $script:hdrTray.Icon.ContextMenuStrip) 'Automatic right-click opening must stay disabled'
     Assert (-not $script:hdrTray.Automatic.Checked -and $script:hdrTray.Automatic.Text -eq 'Enable auto-switching') 'A disabled preference must offer to enable automatic HDR switching'
-    Assert (($script:hdrTray.Menu.Items | Where-Object {$_ -is [Windows.Forms.ToolStripMenuItem] -and $_ -isnot [LocalHdrMenu.TrayStatusItem]} | ForEach-Object Text) -join '|' -eq 'Settings...|Start with Windows|Check for updates|About|Exit') 'Right-click menu contains wrong items'
-    Assert ($script:hdrTray.Menu.Items.Count -eq 7 -and $script:hdrTray.Menu.Items[1] -is [Windows.Forms.ToolStripSeparator] -and $script:hdrTray.Menu.Items[5] -is [Windows.Forms.ToolStripSeparator]) 'Right-click menu groups are incorrect'
+    Assert (($script:hdrTray.Menu.Items | Where-Object {$_ -is [Windows.Forms.ToolStripMenuItem] -and $_ -isnot [LocalHdrMenu.TrayStatusItem]} | ForEach-Object Text) -join '|' -eq 'Settings...|Start with Windows|About|Exit') 'Right-click menu contains wrong items'
+    Assert ($script:hdrTray.Menu.Items.Count -eq 6 -and $script:hdrTray.Menu.Items[1] -is [Windows.Forms.ToolStripSeparator] -and $script:hdrTray.Menu.Items[4] -is [Windows.Forms.ToolStripSeparator]) 'Right-click menu groups are incorrect'
     Assert ($script:hdrTray.Menu.Items[0] -eq $script:hdrTray.AppSettings -and $script:hdrTray.AppSettings.Enabled) 'Settings command must be first in the right-click menu'
     Assert ($script:hdrTray.Status -is [LocalHdrMenu.TrayStatusItem] -and -not $script:hdrTray.Status.Enabled -and -not $script:hdrTray.Status.CanSelect) 'Combined status must be informational'
     $script:appSettingsOpened=0
@@ -54,26 +58,64 @@ try {
     Assert ($script:hdrTray.Startup.Checked) 'Startup should reflect the stored preference'
     $script:hdrTray.Startup.PerformClick()
     Assert (-not $script:testStartup -and -not $script:hdrTray.Startup.Checked) 'Startup toggle should save disabled without exiting the tray'
+    Assert ($script:lastNotification -match 'no longer start with Windows') 'Disabling startup must notify'
+    $script:lastNotification=$null
     $script:hdrTray.Startup.PerformClick()
     Assert ($script:testStartup -and $script:hdrTray.Startup.Checked) 'Startup toggle should save enabled'
+    Assert ($null -eq $script:lastNotification) 'Successful startup registration should leave the notification to Windows'
+    $about=$script:hdrTray.AboutWindow
+    $clickUpdate=[EventHandler]{ $this.CheckUpdates.PerformClick(); $this.AcceptButton.PerformClick() }
+    $about.add_Shown($clickUpdate)
     $script:hdrTray.About.PerformClick()
-    Assert ($script:lastMessage -match '1.0.0' -and $script:lastMessage -match 'Middle click') 'About should show version and controls'
+    $about.remove_Shown($clickUpdate)
+    Assert ($script:updateRequests -eq 1) 'About should start the update check from its button'
+    Assert ($about.Controls.Find('GitHubLink',$true).Count -eq 1 -and $about.MessageText.Text -notmatch 'github\.com') 'About should link to GitHub through the icon'
+    Assert ($about.Controls.Find('VersionLabel',$true)[0].Text -eq 'Version: 1.0.0' -and $about.MessageText.Text -match 'Middle click') 'About should show version and controls'
     foreach ($case in @('current','newer','older','none','preview','offline','invalid')) {
         $tag = switch ($case) { 'current' {'v1.0.0'} 'newer' {'v1.10.0'} 'older' {'v0.9.0'} 'preview' {'v1.1.0-beta'} default {'invalid'} }
         $result = @{tag_name=$tag;draft=$false;prerelease=($case -eq 'preview')} | ConvertTo-Json
         $script:hdrTray.UpdateCheck = [pscustomobject]@{Finished=$true;Result=$result;NoRelease=($case -eq 'none');Error=$(if ($case -eq 'offline') {'offline'} else {$null})}
         $script:hdrTray.CheckUpdates.Enabled = $false
+        $script:lastNotification=$null
         Complete-HdrUpdateCheck
-        Assert ($null -eq $script:hdrTray.UpdateCheck -and $script:hdrTray.CheckUpdates.Enabled) 'Update check must restore the menu item'
+        Assert ($null -eq $script:hdrTray.UpdateCheck -and $script:hdrTray.CheckUpdates.Enabled) 'Update check must restore the About button'
         $expected = switch ($case) { 'current' {'latest version'} 'older' {'latest version'} 'newer' {'newer version is available: 1.10.0'} 'none' {'No newer version'} default {'Could not check'} }
-        Assert ($script:lastMessage -match $expected) ('Wrong update result: ' + $case)
+        if ($case -eq 'newer') { Assert ($script:lastNotification -match $expected -and $script:notifyVersion -eq '1.10.0' -and -not $script:opensAbout) 'Available-update notification must offer installation' }
+        elseif ($case -in 'current','older','none') { Assert ($script:lastNotification -match $expected -and $script:opensAbout) ('Missing About notification: '+$case) }
+        else { Assert ($script:lastMessage -match $expected) ('Wrong update result: '+$case) }
         Assert ($script:lastMessage -notmatch 'Ketarin|Open GitHub') 'Update messages must stay inside the app'
-        Assert ($null -eq $script:offeredVersion) 'Declining an update must not start installation'
+        Assert ($null -eq $script:offeredVersion) 'Checking for an update must not start installation'
+        if ($case -in 'current','older','none') {
+            $about.Show()
+            $script:lastNotification=$null
+            $script:hdrTray.UpdateCheck=[pscustomobject]@{Finished=$true;Result=$result;NoRelease=($case -eq 'none');Error=$null}
+            Complete-HdrUpdateCheck
+            Assert ($about.Controls.Find('UpdateStatus',$true)[0].Text -eq (([string][char]0x2713)+' Up to date') -and $script:lastNotification -match $expected) 'No-update result should appear in About and send a Windows notification'
+            $about.SetUpToDate($false)
+            $about.Hide()
+        }
     }
-    $script:messageResponse = [Windows.Forms.DialogResult]::Yes
+    $script:lastMessage=$null
     $script:hdrTray.UpdateCheck = [pscustomobject]@{Finished=$true;Result='{"tag_name":"v1.1.0","draft":false,"prerelease":false}';NoRelease=$false;Error=$null}
     Complete-HdrUpdateCheck
-    Assert ($script:offeredVersion -eq '1.1.0') 'Accepting a newer release must launch the in-app installer'
+    $about.Show()
+    Assert ($about.CheckUpdates.Text -eq 'Install update' -and $about.Controls.Find('UpdateStatus',$true)[0].Text -eq 'Version 1.1.0 available' -and $null -eq $script:lastMessage) 'A newer release should offer installation in About without a prompt'
+    $about.CheckUpdates.PerformClick()
+    $about.Hide()
+    Assert ($script:offeredVersion -eq '1.1.0') 'Install update must use the offered version'
+    $script:hdrNotifier=New-Object PSObject
+    $script:hdrNotifier | Add-Member ScriptMethod Show { param($toast) $script:toastXml=[xml]$toast.Content.GetXml() }
+    & $script:sendRealNotification 'Test update available' -InstallVersion '1.1.0'
+    Assert ($script:toastXml.toast.activationType -eq 'protocol' -and $script:toastXml.toast.launch -cmatch '^notuxius-hdr-control:install/([a-f0-9]{32})$') 'Update toast must launch its install link'
+    $id=$Matches[1]
+    $script:offeredVersion=$null
+    $script:hdrTray.AvailableVersion=$null
+    Install-HdrNotificationUpdate ([Guid]::NewGuid().ToString('N'))
+    Assert ($null -eq $script:offeredVersion) 'Unrecognized notification must not install anything'
+    Install-HdrNotificationUpdate $id
+    Assert ($script:offeredVersion -eq '1.1.0') 'Notification click after a tray restart must use the same installer as About'
+    & $script:sendRealNotification 'Test current version' -OpenAbout
+    Assert ($script:toastXml.toast.launch -ceq 'notuxius-hdr-control:about') 'Current-version notification should still open About'
     Assert ($null -eq $script:requestedUri) 'Updating must not open a browser'
     $script:messageResponse = [Windows.Forms.DialogResult]::No
     Assert ($script:hdrTray.Menu.ShowActionIcons) 'Right-click menu icons are missing'
@@ -122,9 +164,11 @@ try {
     $script:hdrTray.Automatic.PerformClick()
     Assert ($script:hdrTray.Automatic.Checked -and $script:hdrTray.Icon.Icon.Handle -eq $script:hdrTray.AutoIdleIcon.Handle) 'Checking auto-enable with HDR off must immediately show yellow with play'
     Assert ($script:hdrTray.Automatic.Text -eq 'Disable auto-switching') 'Enabling automation must immediately offer the disable action'
+    Assert ($script:lastNotification -eq 'Automatic HDR switching is enabled.') 'Enabling automation must notify'
     $script:hdrTray.Automatic.PerformClick()
     Assert ($script:hdrTray.Icon.Icon.Handle -eq $script:hdrTray.DisabledIcon.Handle) 'Unchecking auto-enable with HDR off must immediately show yellow with pause'
     Assert ($script:hdrTray.Automatic.Text -eq 'Enable auto-switching') 'Disabling automation must immediately offer the enable action'
+    Assert ($script:lastNotification -eq 'Automatic HDR switching is disabled.') 'Disabling automation must notify'
     Assert ($script:hdrTray.Command.Text -eq 'Enable HDR') 'SDR command incorrect'
     $script:hdrTray.Command.PerformClick()
     Assert ($script:requestedAction -eq 'On') 'Enable did not request On'
@@ -135,20 +179,22 @@ try {
         Set-HdrDecision $decision
         $expected = if ($decision -eq 'Automatic HDR: idle') { 'Idle' } else { $decision }
         Assert ($script:hdrTray.Status.Text -eq ('HDR: Enabled' + $separator + $expected)) 'Automation decision did not refresh the combined label'
+        Assert ($script:hdrTray.Icon.Text -ceq ('HDR Control - ' + $script:hdrTray.Status.Text)) 'Tooltip must follow automation decision changes immediately'
         Assert ($script:hdrTray.Status.Tag -eq 'HDR: Enabled' -and $script:hdrTray.Status.AutomationDecision -eq $decision) 'Combined icon lost its HDR color or automation badge state'
     }
     Assert ($script:hdrTray.Displays.DropDownItems[1].Text -eq 'HDR: Enabled') 'On labels should be consistent across menus'
     Assert ($script:hdrTray.Icon.Icon.Handle -eq $script:hdrTray.EnabledIcon.Handle) 'HDR should use the green monitor icon'
-    Assert ($script:hdrTray.Icon.Text.EndsWith('HDR: Enabled')) 'Tooltip did not update'
+    Set-HdrDecision ('Enabled for ' + ('x' * 80) + '.exe')
+    Assert ($script:hdrTray.Icon.Text -ceq ('HDR Control - ' + $script:hdrTray.Status.Text) -and $script:hdrTray.Icon.Text.Length -eq 63 -and $script:hdrTray.Icon.Text.EndsWith('...')) 'Long decisions must fit the tooltip and match the menu'
     $script:hdrTray.Automatic.PerformClick()
-    Assert ($script:hdrTray.Icon.Icon.Handle -eq $script:hdrTray.AutoEnabledIcon.Handle -and $script:hdrTray.Icon.Text -like '*auto-enable on*') 'Checking auto-enable with HDR already on must show a play badge without claiming the app enabled it'
+    Assert ($script:hdrTray.Icon.Icon.Handle -eq $script:hdrTray.AutoEnabledIcon.Handle -and $script:hdrTray.Icon.Text -ceq ('HDR Control - ' + $script:hdrTray.Status.Text)) 'Enabling automation must show the play badge and matching status text'
     $script:hdrTray.Automatic.PerformClick()
     Assert ($script:hdrTray.Icon.Icon.Handle -eq $script:hdrTray.EnabledIcon.Handle) 'Unchecking auto-enable with HDR on must immediately show green with pause'
     $primary = [LocalHdrMenu.DisplayApi]::Displays[0]
     $key = Get-HdrMonitorKey $primary
     $script:hdrTray.Automation.Displays[$key] = @{DisplayId=$primary.DisplayId; Owned=$true; Expected=$true; Released=$false}
     Set-HdrTrayState (Get-HdrTrayState @($primary))
-    Assert ($script:hdrTray.Icon.Icon.Handle -eq $script:hdrTray.EnabledIcon.Handle -and $script:hdrTray.Icon.Text -like '*auto-enabled*') 'A display enabled by a launch must show pause when automatic HDR is off and identify automation in the tooltip'
+    Assert ($script:hdrTray.Icon.Icon.Handle -eq $script:hdrTray.EnabledIcon.Handle -and $script:hdrTray.Icon.Text -ceq ('HDR Control - ' + $script:hdrTray.Status.Text)) 'A display enabled by a launch must show pause when automatic HDR is off and match the menu status'
     $script:hdrTray.Automation.Displays.Clear()
     $script:hdrTray.Command.PerformClick()
     Assert ($script:requestedAction -eq 'Off') 'Disable did not request Off'
@@ -191,6 +237,7 @@ try {
     Update-HdrTray
     Assert (-not $script:hdrTray.Command.Enabled) 'Unsupported display has an enabled command'
     Assert ($script:hdrTray.Status.Text -eq 'HDR: Unavailable' -and -not $script:hdrTray.Status.AutomationDecision) 'Unavailable HDR must hide the automation label and badge'
+    Assert ($script:hdrTray.Icon.Text -ceq ('HDR Control - ' + $script:hdrTray.Status.Text)) 'Unavailable tooltip must match the menu status'
     Assert ($script:hdrTray.Displays.Available -and $script:hdrTray.Displays.Enabled -and -not $script:hdrTray.Status.Available) 'An unsupported monitor must expose Displays in place of the main HDR status'
     Assert (-not $script:hdrTray.DisplayName.Available -and $script:hdrTray.Displays.DropDownItems[0].Text -eq 'SDR only') 'Show the unsupported monitor name inside Displays'
     Assert ($script:hdrTray.Displays.DropDownItems[1].Text -eq 'HDR: Unavailable') 'Unavailable labels should be consistent across menus'
@@ -221,8 +268,29 @@ try {
     Assert ($script:syncCount -eq 6) 'Desktop label synchronization stopped'
     [LocalHdrMenu.DisplayApi]::Displays = @((Display 'Reconnected' $false $false))
     $script:hdrTray.Refresh.PerformClick()
+    Assert ($script:lastNotification -eq "Displays refreshed.`n1 added, 1 removed. 1 display connected.") 'Replacing a display must report both changes even when the total stays the same'
     Assert ($script:hdrTray.Status.Text -eq 'HDR: Unavailable' -and $script:hdrTray.Refresh.Available) 'Refresh must reread displays and remain available without HDR'
     Assert ($script:syncCount -eq 7) 'Manual refresh did not synchronize the desktop menu'
+    $script:hdrTray.Refresh.PerformClick()
+    Assert ($script:lastNotification -match '0 added, 0 removed') 'A second refresh must not repeat a change'
+    $monitor=Display 'Reconnected' $false $false
+    $monitor | Add-Member NoteProperty DevicePath 'stable-path'
+    [LocalHdrMenu.DisplayApi]::Displays=@($monitor,(Display 'Extra' $true $false))
+    Update-HdrTray
+    $script:hdrTray.Refresh.PerformClick()
+    Assert ($script:lastNotification -eq "Displays refreshed.`n2 added, 1 removed. 2 displays connected.") 'Background polling must preserve changes for the next manual refresh'
+    $monitor.DisplayId='new-target'
+    $monitor.DevicePath='STABLE-PATH'
+    [LocalHdrMenu.DisplayApi]::Displays=@((Display 'Extra' $true $false),$monitor)
+    $script:hdrTray.Refresh.PerformClick()
+    Assert ($script:lastNotification -match '0 added, 0 removed') 'Target ID changes or reordering must not replace a monitor with the same device path'
+    [LocalHdrMenu.DisplayApi]::Fail=$true
+    $script:hdrTray.Refresh.PerformClick()
+    Assert ($script:lastNotification -match 'Could not refresh') 'A failed scan must report the error'
+    [LocalHdrMenu.DisplayApi]::Fail=$false
+    [LocalHdrMenu.DisplayApi]::Displays=@()
+    $script:hdrTray.Refresh.PerformClick()
+    Assert ($script:lastNotification -eq "Displays refreshed.`n0 added, 2 removed. 0 displays connected.") 'A failed scan must preserve the baseline for removal counts'
     # Reconnect sequence: capable/disabled -> two unavailable displays ->
     # capable again. Keep the submenu open while its rows are replaced.
     [LocalHdrMenu.DisplayApi]::Displays = @((Display 'Laptop' $false $false),(Display 'External' $true $false))
@@ -368,6 +436,17 @@ try {
         Assert (@($actions | Where-Object Enabled).Count -eq 0) 'Launching a change must immediately disable all monitor commands'
         & $script:realStartHdrChange 'Off' $first.DisplayId
         Assert ($script:launches -eq 1) 'Per-display commands must not overlap'
+        $script:hdrTray.Pending | Add-Member NoteProperty ExitCode 0
+        $script:hdrTray.Pending | Add-Member ScriptMethod Dispose {}
+        $script:hdrTray.Pending.HasExited=$true
+        Update-HdrTray
+        Assert ($script:lastNotification -eq 'HDR enabled on Same model.') 'Verified manual change must notify for the selected monitor'
+        & $script:realStartHdrChange 'Off'
+        $script:hdrTray.Pending | Add-Member NoteProperty ExitCode 0
+        $script:hdrTray.Pending | Add-Member ScriptMethod Dispose {}
+        $script:hdrTray.Pending.HasExited=$true
+        Update-HdrTray
+        Assert ($script:lastNotification -eq 'HDR disabled.') 'Verified manual disable must notify'
     } finally { $script:hdrTray.Pending=$null }
     $script:launches=0
     try {
@@ -387,7 +466,10 @@ try {
         $script:hdrTray.UpdateProcess.HasExited=$true
         $script:hdrTray.UpdateProcess | Add-Member ScriptMethod Dispose {}
         Complete-HdrAppUpdate
-        Assert ($null -eq $script:hdrTray.UpdateProcess -and $script:hdrTray.CheckUpdates.Enabled) 'Exited updater must allow retry after cancellation or failure'
+        Assert ($null -eq $script:hdrTray.UpdateProcess -and $script:hdrTray.CheckUpdates.Enabled -and $script:hdrTray.CheckUpdates.Text -eq 'Install update') 'Exited updater must allow retry after cancellation or failure'
     } finally { $script:hdrTray.UpdateProcess=$null }
     'PASS: click routing, native popup placement and screen edges, toggle concurrency, menu contents, state updates, recovery, and settings links.'
-} finally { Close-HdrTray }
+} finally {
+    Remove-Item -LiteralPath ('Registry::'+$script:hdrUpdateSettingsKey) -ErrorAction SilentlyContinue
+    Close-HdrTray
+}

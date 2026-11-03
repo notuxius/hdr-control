@@ -1,7 +1,7 @@
 param([string]$SourceDirectory=(Split-Path $PSScriptRoot))
 $ErrorActionPreference='Stop'
 Add-Type -AssemblyName System.Windows.Forms,System.Drawing
-Add-Type -Path @((Join-Path $SourceDirectory 'TrayTheme.cs'),(Join-Path $SourceDirectory 'ProfilesUi.cs')) -ReferencedAssemblies System.Windows.Forms,System.Drawing
+Add-Type -Path @((Join-Path $SourceDirectory 'TrayTheme.cs'),(Join-Path $SourceDirectory 'ProfilesUi.cs')) -ReferencedAssemblies System.Windows.Forms,System.Drawing,UIAutomationProvider,UIAutomationTypes,WindowsBase
 Add-Type @'
 using System;
 using System.Runtime.InteropServices;

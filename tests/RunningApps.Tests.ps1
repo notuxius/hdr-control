@@ -21,7 +21,7 @@ public static class StandardPickerProbe {
     }
 }
 "@ | Set-Content -LiteralPath $probePath -Encoding UTF8
-try {Add-Type -Path @((Join-Path $repo 'TrayTheme.cs'),(Join-Path $repo 'ProfilesUi.cs'),$probePath) -ReferencedAssemblies System.Windows.Forms,System.Drawing}
+try {Add-Type -Path @((Join-Path $repo 'TrayTheme.cs'),(Join-Path $repo 'ProfilesUi.cs'),$probePath) -ReferencedAssemblies System.Windows.Forms,System.Drawing,UIAutomationProvider,UIAutomationTypes,WindowsBase}
 finally {Remove-Item -LiteralPath $probePath}
 function Assert($condition,$message) {if(-not $condition){throw $message}}
 function Pump($milliseconds) {$watch=[Diagnostics.Stopwatch]::StartNew();while($watch.ElapsedMilliseconds -lt $milliseconds){[Windows.Forms.Application]::DoEvents();Start-Sleep -Milliseconds 5}}

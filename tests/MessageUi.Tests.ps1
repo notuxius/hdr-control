@@ -2,20 +2,37 @@ param([string]$OutputDirectory)
 $ErrorActionPreference='Stop'
 $repo=Split-Path $PSScriptRoot
 Add-Type -AssemblyName System.Windows.Forms,System.Drawing
-Add-Type -Path (Join-Path $repo 'TrayTheme.cs') -ReferencedAssemblies System.Windows.Forms,System.Drawing
+Add-Type -Path @((Join-Path $repo 'TrayTheme.cs'),(Join-Path $repo 'ProfilesUi.cs')) -ReferencedAssemblies System.Windows.Forms,System.Drawing,UIAutomationProvider,UIAutomationTypes,WindowsBase
 [Windows.Forms.Application]::EnableVisualStyles()
 function Assert($condition,$message) { if(-not $condition) {throw $message} }
 if($OutputDirectory) {[void][IO.Directory]::CreateDirectory($OutputDirectory)}
 foreach($scale in @(1.0,1.25,1.5,2.0)) {
     foreach($kind in @('OK','YesNo','OKCancel','YesNoCancel','RetryCancel')) {
-        $message="HDR Control`r`nVersion: 1.1.0`r`n`r`nLeft click: HDR controls`r`nRight click: Settings and app options`r`nMiddle click: Toggle HDR`r`n`r`nBy notuxius"
-        $form=[LocalHdrMenu.DialogMessageForm]::new($message,[Windows.Forms.MessageBoxButtons]$kind)
+        $message="Left click: HDR controls`r`nRight click: Settings and app options`r`nMiddle click: Toggle HDR"
+        $version=if($kind -eq 'OK') {'1.1.0'}
+        $form=[LocalHdrMenu.DialogMessageForm]::new($message,[Windows.Forms.MessageBoxButtons]$kind,$version)
         try {
             $form.ShowInTaskbar=$false; $form.StartPosition='Manual'; $form.Location=[Drawing.Point]::new(-30000,-30000)
             $form.Scale([Drawing.SizeF]::new($scale,$scale)); $form.Font=[Drawing.Font]::new('Segoe UI',[single](10*$scale))
             $form.Show(); [Windows.Forms.Application]::DoEvents()
             Assert ($form.MessageText.Text -eq $message) 'Message content changed'
             $footer=$form.AcceptButton.Parent
+            $links=$form.Controls.Find('GitHubLink',$true)
+            if($kind -eq 'OK') {
+                $label=$form.Controls.Find('VersionLabel',$true)[0]
+                Assert ($label.Text -eq "Version: $version") 'About version is missing'
+                $update=$form.CheckUpdates
+                Assert ($update.Parent -eq $footer -and $footer.Bottom -eq $form.ClientSize.Height -and $update.Left -eq $footer.Padding.Left -and $update.Top -eq $form.AcceptButton.Top -and $update.Right -lt $form.AcceptButton.Left) 'Update button should sit at the bottom left, aligned with OK'
+                $form.SetUpToDate($true)
+                $status=$form.Controls.Find('UpdateStatus',$true)[0]
+                Assert ($status.TextAlign -eq 'MiddleLeft') 'Update confirmation text must align with the left edge of the button'
+                $size=[Windows.Forms.TextRenderer]::MeasureText($status.Text,$status.Font)
+                Assert ($status.Left -eq $update.Left -and $status.Right -eq $update.Right -and $status.Bottom -le $update.Top -and $status.Width -ge $size.Width -and $status.Height -ge $size.Height) 'Update confirmation must fit above the update button'
+                $form.SetUpToDate($false)
+                Assert ($status.Text -eq '') 'A new check should clear the previous result'
+                Assert ($links.Count -eq 1 -and $links[0].TabStop -and $links[0].AccessibleRole -eq 'Link') 'About needs a keyboard-accessible GitHub link'
+                Assert ($links[0].Top -ge $form.MessageText.Bottom) 'GitHub link overlaps About text'
+            } else { Assert ($links.Count -eq 0) 'Unexpected GitHub link outside About' }
             foreach($button in $footer.Controls) {
                 Assert ($button.Right -le $footer.ClientSize.Width -and $button.Bottom -le $footer.ClientSize.Height) 'Message button clipped at scaled size'
             }

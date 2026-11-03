@@ -22,10 +22,10 @@ function Poll {
 }
 $icon = [pscustomobject]@{Warnings=0}
 function Show-HdrNotification { $icon.Warnings++ }
-$script:hdrTray = @{Automation=(New-HdrAutomationState);Icon=$icon;Pending=$null;UpdateProcess=$null}
+$script:hdrTray = @{Automation=(New-HdrAutomationState);Icon=$icon;Pending=$null;UpdateProcess=$null;InstalledApps=@{neverlaunched=$true;knownone=$true}}
 $script:requests = New-Object 'Collections.Generic.List[string]'
 $script:now = [DateTime]::UtcNow
-$script:defaults = @('KnownOne.exe','KnownTwo.exe','NeverLaunched.exe','Excluded.exe')
+$script:defaults = @('KnownOne.exe','KnownTwo.exe','NeverLaunched.exe','Excluded.exe','Absent.exe')
 $script:running = @('KnownOne','KNOWNTWO','KnownOne','CustomOnly','Excluded','Unknown')
 $script:automatic = $false
 $script:community = $true
@@ -49,15 +49,19 @@ try {
     Poll
     Assert ([IO.File]::ReadAllText((Get-HdrDetectedAppsPath)) -ceq $saved) 'Restart reset first detection or duplicated games'
     $rows = @(Get-HdrGameListRows)
+    Assert ((Get-HdrWatchedApps).ContainsKey('absent') -and -not @($rows | Where-Object Executable -eq 'Absent.exe').Count) 'Absent community game should be watched but hidden'
+    $script:hdrTray.InstalledApps.Remove('neverlaunched')
+    Assert (-not @(Get-HdrGameListRows | Where-Object Executable -eq 'NeverLaunched.exe').Count) 'An uninstalled community game remained visible'
+    $script:hdrTray.InstalledApps['neverlaunched'] = $true
     Assert ($rows.Count -eq 5) 'Rows must be deduplicated across lists'
     Assert (@($rows | Where-Object Section -eq 'Auto-detected').Count -eq 2) 'Detected section missing'
-    Assert (@($rows | Where-Object Section -eq 'Defaults').Count -eq 1) 'Unseen defaults are misclassified'
+    Assert (@($rows | Where-Object Section -eq 'Installed').Count -eq 1) 'Unseen defaults are misclassified'
     Assert (@($rows | Where-Object Section -eq 'Custom').Count -eq 2) 'Custom entries and exclusions missing'
     $panel = [LocalHdrMenu.GameListsForm]::new()
     $script:hdrTray.SettingsWindow = $panel
     Update-HdrGameListsPanel
     $tabs = @($panel.Controls | Where-Object { $_ -is [LocalHdrMenu.DialogTabs] })[0]
-    Assert ($tabs.TabPages[0].Text -eq 'Auto-detected (2/2)' -and $tabs.TabPages[1].Text -eq 'Defaults (1/1)' -and $tabs.TabPages[2].Text -eq 'Custom (1/2)') 'Window sections/counts differ from saved records'
+    Assert ($tabs.TabPages[0].Text -eq 'Auto-detected (2/2)' -and $tabs.TabPages[1].Text -eq 'Installed (1/1)' -and $tabs.TabPages[2].Text -eq 'Custom (1/2)') 'Window sections/counts differ from saved records'
     # A later custom exclusion must override existing detection history.
     [IO.File]::AppendAllText((Get-HdrCustomAppsPath), "`r`n!KnownOne.exe")
     Assert (-not (Get-HdrWatchedApps).ContainsKey('knownone')) 'History bypassed exclusion'
@@ -98,9 +102,10 @@ try {
     $rule=New-HdrGameRule 'CustomOnly.exe'; $rule.LaunchPath='C:\Games\CustomOnly.exe'; $rule.ExitDelay=12
     $profiles.Rules=@($rule); Save-HdrProfiles $profiles
     $script:automatic=$false
-    Set-HdrGameEnabled 'NeverLaunched.exe' $false
+    Set-HdrGameEnabled @('NeverLaunched.exe','CustomOnly.exe') $false
+    Assert (-not (Get-HdrWatchedApps).ContainsKey('customonly')) 'Bulk change skipped an existing custom rule'
     $default=Get-HdrGameListRows | Where-Object Executable -eq 'NeverLaunched.exe'
-    Assert (-not $default.Enabled -and $default.Section -eq 'Defaults') 'Unchecking a default moved it out of the tab'
+    Assert (-not $default.Enabled -and $default.Section -eq 'Installed') 'Unchecking a default moved it out of the tab'
     Remove-HdrLocalGame 'NeverLaunched.exe'
     Set-HdrGameEnabled 'CUSTOMONLY' $false
     Assert (-not (Get-HdrWatchedApps).ContainsKey('customonly')) 'Unchecked custom game still watched'
@@ -120,7 +125,7 @@ try {
     Assert (-not $entry.Enabled -and $entry.CanRemove -and $entry.Section -eq 'Auto-detected') 'Detected game checkbox ignored its local exclusion'
     Remove-HdrLocalGame 'KNOWNONE'
     $entry=Get-HdrGameListRows | Where-Object Executable -eq 'KnownOne.exe'
-    Assert ($entry.Enabled -and -not $entry.CanRemove -and $entry.Section -eq 'Defaults' -and (Read-HdrDetectedApps).ContainsKey('knowntwo')) 'Removing a local override did not restore the default or damaged unrelated history'
+    Assert ($entry.Enabled -and -not $entry.CanRemove -and $entry.Section -eq 'Installed' -and (Read-HdrDetectedApps).ContainsKey('knowntwo')) 'Removing a local override did not restore the default or damaged unrelated history'
     'PASS: game detection, checkboxes, rule preservation, personal entry removal, default restoration, and history failures.'
 } finally {
     if ($null -ne $panel) { $panel.Dispose() }

@@ -33,7 +33,9 @@ function Poll($Displays) {
 $off = @([pscustomobject]@{DevicePath='Test monitor';DisplayId='dGVzdA==';HdrSupported=$true;HdrEnabled=$false})
 $on = @([pscustomobject]@{DevicePath='Test monitor';DisplayId='dGVzdA==';HdrSupported=$true;HdrEnabled=$true})
 $icon = [pscustomobject]@{}
-function Show-HdrNotification { throw 'Unexpected process/list read failure' }
+function Show-HdrNotification($Message) {
+    Assert ($Message -in @(('HDR turned on automatically for '+$gameName+'.exe.'),('HDR turned off automatically after '+$gameName+'.exe exited.'))) $Message
+}
 try {
     $template = Join-Path $root ($gameName + '.exe')
     Add-Type -TypeDefinition 'public static class HdrStandaloneTest { public static void Main() { System.Threading.Thread.Sleep(120000); } }' -OutputAssembly $template -OutputType WindowsApplication

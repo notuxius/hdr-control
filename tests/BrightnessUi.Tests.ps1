@@ -2,7 +2,7 @@ param([string]$OutputDirectory)
 $ErrorActionPreference='Stop'
 $repo=Split-Path $PSScriptRoot
 Add-Type -AssemblyName System.Windows.Forms,System.Drawing
-Add-Type -Path @((Join-Path $repo 'TrayTheme.cs'),(Join-Path $repo 'ProfilesUi.cs')) -ReferencedAssemblies System.Windows.Forms,System.Drawing
+Add-Type -Path @((Join-Path $repo 'TrayTheme.cs'),(Join-Path $repo 'ProfilesUi.cs')) -ReferencedAssemblies System.Windows.Forms,System.Drawing,UIAutomationProvider,UIAutomationTypes,WindowsBase
 $source=[IO.File]::ReadAllText((Join-Path $repo 'HdrSdrMenu.ps1'))
 $native=[regex]::Match($source,"(?s)Add-Type -TypeDefinition @'\r?\n(.*?)\r?\n'@").Groups[1].Value
 Add-Type -TypeDefinition $native
@@ -148,23 +148,59 @@ foreach($scale in @(1.0,1.25,1.5,2.0)) {
         $night=$editor.NightSlider.Parent
         $readout=$editor.Runtime.Parent.Parent
         $value=$readout.Controls | Where-Object Text -eq '100%'
-        Assert ($settings.FormBorderStyle -eq 'FixedDialog' -and -not $settings.MaximizeBox) 'Settings must have a fixed window size'
+        Assert ($settings.FormBorderStyle -eq 'Sizable') 'Settings must be resizable'
         $width=$settings.Width
         [Windows.Forms.Application]::DoEvents()
         Assert ($value -and $value.Right -le $editor.Runtime.Parent.Left -and $readout.ClientRectangle.Contains($value.Bounds)) "Readout overlaps at width $width and scale $scale"
         Assert ($day.Visible -and $night.Visible -and $day.Top -eq $night.Top -and $day.Right -lt $night.Left) 'Period cards must sit side by side'
         foreach ($card in @($day,$night)) { Check-PanelBounds $card $scale }
         Assert (-not $editor.Slider.Visible -and $day.Controls.Text -contains '62%' -and $night.Controls.Text -contains '24%') 'Scheduled level labels are incorrect'
-        $settings.ClientSize=[Drawing.Size]::new(720,480)
-        [Windows.Forms.Application]::DoEvents()
         $content=$settings.Sections.Parent
-        Assert ($content.HorizontalScroll.Visible -and $content.VerticalScroll.Visible) 'Settings must scroll when constrained by a small working area'
-        Assert ($settings.RectangleToScreen($settings.ClientRectangle).Contains($close.RectangleToScreen($close.ClientRectangle))) 'Close must stay within the window on a small working area'
-        $unavailable=[LocalHdrMenu.MonitorBrightness]@{Name='HDR off';DisplayId='Qg==';PreferenceKey=('B'*64);HdrOff=$true;Runtime='Manual control';Status='Enable HDR on this monitor to adjust SDR brightness.'}
+        $area=[Windows.Forms.Screen]::FromControl($settings).WorkingArea.Size
+        $settings.Size=[Drawing.Size]::new(100,100)
+        [Windows.Forms.Application]::DoEvents()
+        $sharedMinimum=$settings.MinimumSize
+        $compactBounds=$settings.Bounds
+        foreach($tab in @(0,1,2,0)) {
+            $settings.Sections.SelectedIndex=$tab
+            [Windows.Forms.Application]::DoEvents()
+            Assert ($settings.MinimumSize -eq $sharedMinimum -and $settings.Size -eq $sharedMinimum -and $settings.Bounds -eq $compactBounds) "Switching to tab $tab changed the minimum size or window bounds"
+            if($content.AutoScrollMinSize.Width -le $content.ClientSize.Width) {
+                Assert (-not $content.HorizontalScroll.Visible) "Unexpected horizontal scrollbar on tab $tab"
+            } else { Assert ($settings.Width -eq $area.Width) "Width limit allows a horizontal scrollbar on tab $tab" }
+            if($content.AutoScrollMinSize.Height -le $content.ClientSize.Height) {
+                Assert (-not $content.VerticalScroll.Visible) "Unexpected vertical scrollbar on tab $tab"
+            } else { Assert ($settings.Height -eq $area.Height) "Height limit allows a vertical scrollbar on tab $tab" }
+            if($tab -eq 0 -and $settings.Height -lt $area.Height) {
+                Assert (-not $editor.Body.HorizontalScroll.Visible -and -not $editor.Body.VerticalScroll.Visible) 'The brightness editor should fit at minimum size'
+            }
+            Assert ($settings.RectangleToScreen($settings.ClientRectangle).Contains($close.RectangleToScreen($close.ClientRectangle))) 'Close must stay within the window'
+        }
+        $editor.Switching.SelectedItem='Sunrise & sunset (location)'
+        $settings.Height=100
+        [Windows.Forms.Application]::DoEvents()
+        Assert ($settings.Height -eq $area.Height -or -not $editor.Body.VerticalScroll.Visible) 'The expanded brightness controls should fit at minimum height'
+        $settings.Width=$width+80
+        [Windows.Forms.Application]::DoEvents()
+        Assert ($settings.Width -gt $width -and $settings.Sections.Width -eq $content.DisplayRectangle.Width) 'Settings pages should expand when widened'
+        $expandedMinimum=$settings.MinimumSize
+        $expandedBounds=$settings.Bounds
+        foreach($tab in @(2,1,0)) {
+            $settings.Sections.SelectedIndex=$tab
+            [Windows.Forms.Application]::DoEvents()
+            Assert ($settings.MinimumSize -eq $expandedMinimum -and $settings.Bounds -eq $expandedBounds) "Expanded brightness layout changed window dimensions on tab $tab"
+        }
+        $unavailable=[LocalHdrMenu.MonitorBrightness]@{Name='HDR off';DisplayId='Qg==';PreferenceKey=('B'*64);HdrOff=$true;Runtime='Manual control'}
         $settings.SetDisplays(@($unavailable)); $settings.SelectDisplay($unavailable.DisplayId)
         $editor=$settings.Brightness
         Assert ($editor.Slider.Visible -and -not $editor.Slider.Enabled -and -not $editor.DaySlider.Visible) 'HDR off must keep the manual slider visible and disabled'
-        Assert ($editor.Status.Text -eq $unavailable.Status -and $editor.Runtime.Text -eq $unavailable.Runtime) 'The enable-HDR instruction should appear only in the status line'
+        $notice=$settings.Sections.TabPages[0].Controls | Where-Object { $_.Controls.Text -contains 'Enable HDR' }
+        $enable=$notice.Controls | Where-Object Text -eq 'Enable HDR'
+        Assert ($enable.Visible -and $enable.Enabled -and $notice.Bottom -le $settings.DisplayPicker.Parent.Top -and $notice.Controls.Text -contains 'HDR is off. Enable HDR to adjust SDR brightness.') 'Expected the HDR notice and action above the brightness header'
+        $unavailable.Busy=$true
+        $settings.SetDisplays(@($unavailable))
+        Assert (-not $enable.Enabled) 'Enable HDR must be disabled during a pending display change'
+        $unavailable.Busy=$false
         $value=$editor.Runtime.Parent.Parent.GetControlFromPosition(0,0)
         Assert ($value.Text -eq [string][char]0x2014) 'Missing brightness history should show a dash'
         $editId=[LocalHdrMenu.MonitorBrightness]::Capture($editor).EditId
@@ -178,6 +214,7 @@ foreach($scale in @(1.0,1.25,1.5,2.0)) {
         $unavailable.HdrOff=$false
         $settings.SetDisplays(@($unavailable))
         Assert ($value.AccessibleName -eq 'Manual brightness 70%' -and $editor.Slider.Enabled) 'Re-enabling HDR must restore the live level'
+        Assert (-not $notice.Visible) 'The HDR notice must disappear when HDR becomes enabled'
         $editor.LoadSettings(4100,2200,'Manual',480,1080,$false)
         $unavailable.LastUsedLevel=3500
         foreach ($off in @($true,$false)) {
@@ -211,6 +248,7 @@ foreach($scale in @(1.0,1.25,1.5,2.0)) {
             }
         }
         $settings.SetDisplays(@())
+        Assert (-not $notice.Visible) 'A disconnected display must not offer an HDR action'
         Assert ($null -eq $settings.Brightness -and $close.Visible -and $close.Enabled) 'Close must be available without a display'
     } finally { $settings.Dispose() }
 }

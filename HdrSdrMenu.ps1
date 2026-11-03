@@ -8,6 +8,8 @@ param(
     [uint32]$SdrWhiteLevel = 1000,
     [ValidatePattern('^[a-f0-9]{32}$')][string]$LaunchId,
     [switch]$FromHelper,
+    [switch]$OpenAbout,
+    [ValidatePattern('^[a-f0-9]{32}$')][string]$InstallOffer,
     [switch]$ShowError
 )
 $ErrorActionPreference = 'Stop'
@@ -290,14 +292,25 @@ namespace LocalHdrMenu {
         # One hidden helper per interactive session. Re-read state so changes from
         # Windows Settings, games, and Win+Alt+B are reflected in the menu too.
         $watchMutex = New-Object Threading.Mutex($false, 'Local\HdrSdrMenu.LabelWatcher.v1')
+        $aboutRequest = [Threading.EventWaitHandle]::new($false,'AutoReset','Local\HdrSdrMenu.OpenAbout.v1')
         $ownsMutex = $false
         try {
             try { $ownsMutex = $watchMutex.WaitOne(0) }
             catch [Threading.AbandonedMutexException] { $ownsMutex = $true }
+            if ($OpenAbout) { [void]$aboutRequest.Set() }
+            if ($InstallOffer) {
+                . (Join-Path $installDir 'HdrProfiles.ps1')
+                $requests = Get-HdrRequestDirectory
+                [void][IO.Directory]::CreateDirectory($requests)
+                Write-HdrAtomicText (Join-Path $requests ('update-'+[Guid]::NewGuid().ToString('N')+'.json')) (
+                    @{Kind='InstallUpdate';Id=$InstallOffer;CreatedUtc=[DateTime]::UtcNow.ToString('o')} | ConvertTo-Json -Compress
+                )
+            }
             if (-not $ownsMutex) { return }
             . (Join-Path $installDir 'HdrTray.ps1')
             Start-HdrTray
         } finally {
+            $aboutRequest.Dispose()
             if ($ownsMutex) { $watchMutex.ReleaseMutex() }
             $watchMutex.Dispose()
         }

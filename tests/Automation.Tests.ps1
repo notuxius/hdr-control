@@ -53,7 +53,7 @@ try {
         $script:hdrTray.Pending = [pscustomobject]@{HasExited=$false}
     }
     $icon = [pscustomobject]@{Warnings=0}
-    function Show-HdrNotification { $icon.Warnings++ }
+    function Show-HdrNotification($Message) { if ($Message -notlike 'HDR turned * automatically *') { $icon.Warnings++ } }
     $script:hdrTray = @{
         Automation = New-HdrAutomationState
         Pending = $null; UpdateProcess = $null; Icon = $icon

@@ -17,7 +17,7 @@ public static class GameWindowProbe {
     public static SettingsWindow Create() {
         Ready.Reset(); Closed.Reset(); Clicked.Reset(); Pulses=0; Command=0;
         return new SettingsWindow(delegate {
-            var window=new SettingsForm(); var form=window.Games; window.Sections.SelectedIndex=1; window.ShowInTaskbar=false; window.StartPosition=FormStartPosition.Manual; window.Location=new System.Drawing.Point(-30000,-30000);
+            var window=new SettingsForm(null); var form=window.Games; window.Sections.SelectedIndex=1; window.ShowInTaskbar=false; window.StartPosition=FormStartPosition.Manual; window.Location=new System.Drawing.Point(-30000,-30000);
             DialogTabs tabs=null; foreach(Control c in form.Controls) if(c is DialogTabs) tabs=(DialogTabs)c;
             ListView defaults=null,custom=null;
             foreach(Control c in tabs.TabPages[1].Controls) if(c is ListView) defaults=(ListView)c;
@@ -29,7 +29,8 @@ public static class GameWindowProbe {
                 int command=Interlocked.Exchange(ref Command,0);
                 if(command==1) tabs.SelectedIndex=(tabs.SelectedIndex+1)%3;
                 if(command==2) {
-                    tabs.SelectedIndex=1; defaults.SelectedIndices.Add(799); defaults.EnsureVisible(799);
+                    tabs.SelectedIndex=1; var game=defaults.FindItemWithText("Game0799.exe",false,0,true);
+                    defaults.SelectedIndices.Add(game.Index); defaults.EnsureVisible(game.Index);
                     form.LaunchButton.PerformClick(); Clicked.Set();
                     // Change selection before the tray gets around to dispatching.
                     tabs.SelectedIndex=2; custom.SelectedIndices.Add(0);
@@ -51,6 +52,24 @@ public static class GameWindowProbe {
     public static string Inspect(IntPtr handle,string action) {
         var window=(SettingsForm)Control.FromHandle(handle);
         return (string)window.Invoke(new Func<string>(delegate {
+            if(action.StartsWith("list handle ")) {
+                DialogTabs tabs=null;
+                foreach(Control c in window.Games.Controls) if(c is DialogTabs) tabs=(DialogTabs)c;
+                tabs.SelectedIndex=Int32.Parse(action.Substring(12));
+                foreach(Control c in tabs.TabPages[tabs.SelectedIndex].Controls) if(c is ListView) return c.Handle.ToInt64().ToString();
+                throw new Exception("No game list");
+            }
+            if(action=="auto notice") {
+                if(window.AutomaticOffNotice.Visible && window.AutomaticOffNotice.Bottom>window.Games.Top)
+                    throw new Exception("Auto-switching notice overlaps settings");
+                return window.AutomaticOffNotice.Visible.ToString();
+            }
+            if(action=="enable automatic") {
+                if(!window.EnableAutomatic.Visible || !window.EnableAutomatic.Enabled)
+                    throw new Exception("Enable auto-switching button unavailable");
+                window.EnableAutomatic.PerformClick();
+                return "";
+            }
             if(action=="edit brightness") {
                 window.Location=new System.Drawing.Point(-30000,-30000);
                 window.Brightness.Slider.Value=67;
@@ -70,7 +89,15 @@ public static class GameWindowProbe {
                 window.Brightness.Enforce.Checked=true;
             }
             if(action=="edit before close") window.Brightness.DayStart.Step(1);
-            if(action=="open profiles") window.Sections.SelectedIndex=2;
+            if(action=="open profiles") {
+                window.Sections.SelectedIndex=2;
+                foreach(Control c in window.Profiles.Controls)
+                    if((c is Label || c is DialogTabs) && !c.Enabled)
+                        throw new Exception("Profile headings and tab navigation must be enabled on first paint");
+                if(!window.Profiles.DataLoaded && (window.Profiles.ExitPolicy.Enabled || window.Profiles.Monitors.Enabled ||
+                    window.Profiles.NewPreset.Enabled || window.Profiles.CopyDiagnosticsButton.Enabled))
+                    throw new Exception("Profile edits became available before settings loaded");
+            }
             if(action=="game save status") return window.GameSaveStatus.Text;
             if(action=="profile save status") return window.ProfileSaveStatus.Text;
             if(action=="brightness save status") return window.Brightness.Status.Text;
@@ -122,13 +149,13 @@ public static class GameWindowProbe {
             int visible=0; foreach(Panel page in window.Sections.TabPages) if(page.Visible) visible++;
             if(visible!=1 || window.Games.TopLevel || window.Profiles.TopLevel || window.Brightness.TopLevel)
                 throw new Exception("Settings pages must share one top-level window");
-            return window.Sections.SelectedIndex+"|"+window.Profiles.Enabled+"|"+window.Brightness.DisplayId+"|"+window.Brightness.SelectedLevel;
+            return window.Sections.SelectedIndex+"|"+window.Profiles.DataLoaded+"|"+window.Brightness.DisplayId+"|"+window.Brightness.SelectedLevel;
         }));
     }
     public static SettingsWindow Broken() {return new SettingsWindow(delegate {throw new Exception("Test window failure");});}
 }
 '@ | Set-Content -LiteralPath $probePath -Encoding UTF8
-try {Add-Type -Path @((Join-Path $repo 'TrayTheme.cs'),(Join-Path $repo 'ProfilesUi.cs'),$probePath) -ReferencedAssemblies System.Windows.Forms,System.Drawing}
+try {Add-Type -Path @((Join-Path $repo 'TrayTheme.cs'),(Join-Path $repo 'ProfilesUi.cs'),$probePath) -ReferencedAssemblies System.Windows.Forms,System.Drawing,UIAutomationProvider,UIAutomationTypes,WindowsBase}
 finally {Remove-Item -LiteralPath $probePath}
 [Windows.Forms.Application]::EnableVisualStyles()
 [Windows.Forms.Control]::CheckForIllegalCrossThreadCalls=$true
@@ -159,12 +186,36 @@ $toggleConfirmations=New-Object 'Collections.Generic.List[Action]'
 $window.add_EnableRequested({param($exe,$enabled) $changes.Add("${exe}=$enabled"); $toggleConfirmations.Add($window.SaveConfirmation)})
 try {
     $window.ClearRows()
-    for($i=0;$i -lt 800;$i++){$window.AddRow('Defaults',('Game{0:D4}.exe' -f $i),'Watching','')}
+    foreach($section in 'Auto-detected','Installed','Custom') {
+        for($i=0;$i -lt 800;$i++) { $window.AddRow($section,('Game{0:D4}.exe' -f $i),'Watching','') }
+    }
     $window.AddRow('Custom','Custom.exe','Watching',''); $window.FinishRows()
     $window.Show()
     Assert ([GameWindowProbe]::Ready.WaitOne(3000)) 'Game lists did not open'
     for($i=0;$i -lt 6;$i++){[GameWindowProbe]::Command=1;[Threading.Thread]::Sleep(100)}
-    Assert ([GameWindowProbe]::Pulses -ge 10 -and [GameWindowProbe]::DefaultsCount -eq 800) 'Tabs stalled while the tray thread was blocked'
+    Assert ([GameWindowProbe]::Pulses -ge 10 -and [GameWindowProbe]::DefaultsCount -eq 800) 'Virtual lists stalled while the tray thread was blocked'
+    # Inspect from a separate process while the production settings STA runs its own message loop.
+    foreach($tab in 0..2) {
+        $listHandle=[long][GameWindowProbe]::Inspect($window.Handle,"list handle $tab")
+        $job=Start-Job -ArgumentList $listHandle -ScriptBlock {
+            param($listHandle)
+            $ErrorActionPreference='Stop'
+            Add-Type -AssemblyName UIAutomationClient
+            $root=[Windows.Automation.AutomationElement]::FromHandle([IntPtr]$listHandle)
+            $children=$root.FindAll([Windows.Automation.TreeScope]::Children,[Windows.Automation.Condition]::TrueCondition)
+            if($children.Count -lt 1 -or $children.Count -ge 100) { throw "Inspection traversed $($children.Count) children" }
+            $container=$root.GetCurrentPattern([Windows.Automation.ItemContainerPattern]::Pattern)
+            $tail=$container.FindItemByProperty($null,[Windows.Automation.AutomationElement]::NameProperty,'Game0799.exe')
+            if($null -eq $tail -or -not $tail.Current.IsOffscreen) { throw 'Expected an offscreen game' }
+            $tail.GetCurrentPattern([Windows.Automation.VirtualizedItemPattern]::Pattern).Realize()
+            $tail.GetCurrentPattern([Windows.Automation.SelectionItemPattern]::Pattern).Select()
+            if($tail.Current.IsOffscreen -or $tail.Current.ItemStatus -ne 'Watching') { throw 'Could not read the realized game' }
+        }
+        try {
+            if(-not (Wait-Job $job -Timeout 12)) { throw "Timed out inspecting games on tab $tab" }
+            Receive-Job $job -ErrorAction Stop
+        } finally { Remove-Job $job -Force }
+    }
     [GameWindowProbe]::Command=2
     Assert ([GameWindowProbe]::Clicked.WaitOne(2000)) 'Launch click did not reach the window'
     Assert ([GameWindowProbe]::UiError -eq '') ('Window test failed: '+[GameWindowProbe]::UiError)
@@ -182,7 +233,7 @@ try {
     $toggleConfirmations[1].Invoke(); Pump 90
     Wait-Checkmark $window.Handle 'game'
     Assert ([GameWindowProbe]::Inspect($window.Handle,'game save status') -ceq (([string][char]0x2713)+' Saved')) 'Latest game toggle did not show Saved'
-    $window.ClearRows();$window.AddRow('Defaults','Replacement.exe','Watching','');$window.FinishRows()
+    $window.ClearRows();$window.AddRow('Installed','Replacement.exe','Watching','');$window.FinishRows()
     $deadline=[Diagnostics.Stopwatch]::StartNew()
     while([GameWindowProbe]::DefaultsCount -ne 1 -and $deadline.ElapsedMilliseconds -lt 2000) { [Threading.Thread]::Sleep(10) }
     Assert ([GameWindowProbe]::DefaultsCount -eq 1) 'Updated snapshot did not reach the window'
@@ -205,17 +256,25 @@ finally {$window.Dispose()}
 # Use the actual tray handlers and UI dispatcher, with simulated displays and storage.
 . (Join-Path $repo 'HdrTray.ps1')
 Add-Type 'namespace LocalHdrMenu { public static class DisplayApi { public static object[] Displays; public static object[] Read() { return Displays; } } }'
-function Get-HdrGameListRows { $script:listReads++ }
+function Get-HdrGameListRows {
+    if($script:hdrTray.SettingsWindow.Handle -eq [IntPtr]::Zero) { $script:readBeforeShown=$true }
+    $script:listReads++
+}
 function Open-HdrSettings([string]$Uri) { $script:requestedUri=$Uri }
 function Get-HdrStartupEnabled { return $false }
 function Get-HdrBrightnessPreference($Key) { return $null }
 function Save-HdrBrightnessPreference { $script:preferenceWrites++ }
 $script:communityEnabled=$true
-function Get-HdrAutomationPreference($Name) { return $Name -eq 'UseCommunityApps' -and $script:communityEnabled }
-function Set-HdrAutomationPreference($Name,[bool]$Enabled) {
-    if ($Name -ne 'UseCommunityApps' -or $script:rejectSave) { throw 'Preference save failed' }
-    $script:communityEnabled=$Enabled
+function Get-HdrAutomationPreference($Name) {
+    if ($Name -eq 'AutomaticHdr') { return [bool]$script:automaticEnabled }
+    return $script:communityEnabled
 }
+function Set-HdrAutomationPreference($Name,[bool]$Enabled) {
+    if ($script:rejectSave) { throw 'Preference save failed' }
+    if ($Name -eq 'AutomaticHdr') { $script:automaticEnabled=$Enabled }
+    else { $script:communityEnabled=$Enabled }
+}
+function Show-HdrNotification($Text) { $script:notification=$Text }
 function Read-HdrProfiles { return $script:config }
 function Save-HdrProfiles($Profiles) { Test-HdrProfiles $Profiles; $script:config=$Profiles; $script:profileWrites++ }
 function Update-HdrTray { }
@@ -239,9 +298,11 @@ try {
     while (($window.Handle -eq [IntPtr]::Zero -or -not $window.ActiveBrightnessId) -and $watch.ElapsedMilliseconds -lt 5000) { Pump 30 }
     $handle=$window.Handle
     Assert ($handle -ne [IntPtr]::Zero) 'Settings command failed to open its window'
+    Assert ([GameWindowProbe]::Inspect($handle,'auto notice') -eq 'False') 'The brightness tab must not show the game detection notice'
     [void][GameWindowProbe]::Inspect($handle,'toggle restore')
     Check-StaticSavingIcon $handle 'brightness'
     Wait-Checkmark $handle 'brightness'
+    Assert ($script:listReads -eq 1 -and -not $script:readBeforeShown) 'Initial game lists must load once after Settings is shown'
     Assert ($script:preferenceWrites -eq 1 -and -not $script:brightnessWrites) 'Preference-only save unexpectedly wrote the display'
     [void][GameWindowProbe]::Inspect($handle,'open HDR settings'); Pump 160
     Assert ($script:requestedUri -eq 'ms-settings:display-hdr') 'Windows HDR settings button must open the HDR page'
@@ -250,6 +311,7 @@ try {
     Pump 220
     $savedText=([string][char]0x2713)+' Saved'
     Assert ([GameWindowProbe]::Inspect($handle,'profile save status') -eq '') 'Loading settings showed a save confirmation'
+    Assert ([GameWindowProbe]::Inspect($handle,'auto notice') -eq 'False') 'The profiles tab must not show the game detection notice'
     Assert ($script:target -eq 'QQ==' -and $script:level -eq 4400) 'Leaving the tab must flush the pending brightness edit'
     Assert ([GameWindowProbe]::Inspect($handle,'read') -eq '2|True|QQ==|4400' -and !$script:profileWrites) ('Loading Profiles must not write settings: '+$script:failure)
     Assert ([GameWindowProbe]::Inspect($handle,'read monitor') -eq 'Same model|Old alias') 'A saved alias must not replace the monitor model'
@@ -273,6 +335,17 @@ try {
     Wait-Checkmark $handle 'profile'
     Assert ([GameWindowProbe]::Inspect($handle,'game save status') -eq '' -and [GameWindowProbe]::Inspect($handle,'profile save status') -ceq $savedText) 'An alias acknowledgement appeared on the wrong tab'
     Assert ([GameWindowProbe]::Inspect($handle,'read community') -eq 'True') 'Game lists did not load the enabled preference'
+    Assert ([GameWindowProbe]::Inspect($handle,'auto notice') -eq 'True') 'Game lists must show the notice while detection is off'
+    $script:rejectSave=$true
+    [void][GameWindowProbe]::Inspect($handle,'enable automatic'); Pump 250
+    Assert ($script:notification -and [GameWindowProbe]::Inspect($handle,'auto notice') -eq 'True') 'A failed enable should report the error and keep the notice'
+    $script:rejectSave=$false
+    $reads=$script:listReads
+    [void][GameWindowProbe]::Inspect($handle,'enable automatic'); Pump 250
+    Assert ($script:automaticEnabled -and $script:hdrTray.Automatic.Checked -and $script:listReads -gt $reads) 'The button must enable detection and refresh game statuses'
+    Assert ([GameWindowProbe]::Inspect($handle,'auto notice') -eq 'False') 'Enabling detection must hide the notice'
+    $script:hdrTray.Automatic.PerformClick(); Pump 200
+    Assert ([GameWindowProbe]::Inspect($handle,'auto notice') -eq 'True') 'Pausing detection from the tray must restore the notice'
     $reads=$script:listReads
     [void][GameWindowProbe]::Inspect($handle,'toggle community')
     Check-StaticSavingIcon $handle 'game'

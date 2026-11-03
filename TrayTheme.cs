@@ -5,6 +5,7 @@ using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Threading;
 using System.Windows.Forms;
+using Microsoft.Win32;
 
 namespace LocalHdrMenu {
     public class DialogForm : Form {
@@ -23,7 +24,11 @@ namespace LocalHdrMenu {
             if(disposing && windowIcon!=null) windowIcon.Dispose();
         }
         [DllImport("dwmapi.dll")] static extern int DwmSetWindowAttribute(IntPtr window,int attribute,ref int value,int size);
-        [DllImport("user32.dll")] static extern bool RedrawWindow(IntPtr window,IntPtr rect,IntPtr region,uint flags);
+        internal static bool DisableWindowTransitions(IntPtr window) {
+            int disabled=1;
+            return DwmSetWindowAttribute(window,3 /* DWMWA_TRANSITIONS_FORCEDISABLED */,ref disabled,sizeof(int))==0;
+        }
+        [DllImport("user32.dll")] internal static extern bool RedrawWindow(IntPtr window,IntPtr rect,IntPtr region,uint flags);
         bool cloaked;
         void Cloak(bool value) {
             if(!TopLevel || !IsHandleCreated) return;
@@ -167,6 +172,12 @@ namespace LocalHdrMenu {
         internal static Pen MarkPen(Color color,float scale) {
             return new Pen(color,2*scale) {StartCap=LineCap.Round,EndCap=LineCap.Round,LineJoin=LineJoin.Round};
         }
+        internal static CheckState ColumnCheckState(int enabled,int total) {
+            return enabled==0 ? CheckState.Unchecked : enabled==total ? CheckState.Checked : CheckState.Indeterminate;
+        }
+        internal static string CheckMark(CheckState state) {
+            return state==CheckState.Checked?"\u2611":state==CheckState.Indeterminate?"\u229f":"\u2610";
+        }
         public static void DrawCheck(Graphics g,RectangleF bounds,CheckState state,bool enabled,bool highlighted,bool focused) {
             var saved=g.Save(); g.SmoothingMode=SmoothingMode.AntiAlias;
             float scale=bounds.Width/18f;
@@ -184,7 +195,7 @@ namespace LocalHdrMenu {
             }
             g.Restore(saved);
         }
-        internal static void DrawListCell(ListView list,Graphics graphics,ListViewItem item,int column,Rectangle cell,bool selected,int checkSlot) {
+        internal static void DrawListCell(ListView list,Graphics graphics,ListViewItem item,int column,Rectangle cell,int checkSlot) {
             if(cell.Width<=0) return;
             var bounds=cell; bounds.Inflate(-12,0);
             if(checkSlot>0) {
@@ -199,7 +210,6 @@ namespace LocalHdrMenu {
             string text=item.SubItems[column].Text;
             if(bounds.Width>0 && text.Length>0)
                 TextRenderer.DrawText(graphics,text,list.Font,bounds,column==0?Text:Muted,TextFormatFlags.VerticalCenter|TextFormatFlags.EndEllipsis|TextFormatFlags.NoPrefix);
-            if(selected && list.Focused && column==0) ControlPaint.DrawFocusRectangle(graphics,cell,Text,Selection);
         }
         public static void Apply(Control control) {
             if(SystemInformation.HighContrast) return;
@@ -233,9 +243,12 @@ namespace LocalHdrMenu {
             if(list!=null) {
                 list.BorderStyle=BorderStyle.None; list.BackColor=Surface; list.OwnerDraw=true;
                 // An image slot gives native rows comfortable, DPI-scaled vertical spacing.
-                var spacing=new ImageList {ImageSize=new Size(1,36),ColorDepth=ColorDepth.Depth32Bit}; list.SmallImageList=spacing;
+                int rowHeight=list is GameListsForm.GameListView ? list.Font.Height+8 : 36;
+                var spacing=new ImageList {ImageSize=new Size(1,rowHeight),ColorDepth=ColorDepth.Depth32Bit}; list.SmallImageList=spacing;
                 list.Disposed+=delegate { spacing.Dispose(); };
                 list.DrawColumnHeader+=delegate(object sender,DrawListViewColumnHeaderEventArgs e) {
+                    var games=list as GameListsForm.GameListView;
+                    if(games!=null) { games.DrawHeader(e); return; }
                     using(var brush=new SolidBrush(Surface)) e.Graphics.FillRectangle(brush,e.Bounds);
                     var bounds=e.Bounds; bounds.Inflate(-12,0);
                     TextRenderer.DrawText(e.Graphics,e.Header.Text,list.Font,bounds,Muted,TextFormatFlags.VerticalCenter|TextFormatFlags.EndEllipsis|TextFormatFlags.NoPrefix);
@@ -245,7 +258,8 @@ namespace LocalHdrMenu {
                     bool selected=e.Item.Selected;
                     using(var brush=new SolidBrush(selected?Selection:Surface)) e.Graphics.FillRectangle(brush,e.Bounds);
                     int slot=e.ColumnIndex==0 && list.CheckBoxes ? list.GetItemRect(e.ItemIndex,ItemBoundsPortion.Label).Left-e.Bounds.Left : 0;
-                    DrawListCell(list,e.Graphics,e.Item,e.ColumnIndex,e.Bounds,selected,slot);
+                    DrawListCell(list,e.Graphics,e.Item,e.ColumnIndex,e.Bounds,slot);
+                    if(selected && list.Focused && e.ColumnIndex==0) ControlPaint.DrawFocusRectangle(e.Graphics,e.Bounds,Text,Selection);
                 };
             }
             var grid=control as DataGridView;
@@ -280,7 +294,7 @@ namespace LocalHdrMenu {
             timer.Tick+=delegate {
                 timer.Stop();
                 if(!saving) ClearFeedback();
-                else if(confirmation!=null) ShowConfirmation();
+                else if(confirmation!=null) ShowConfirmation(confirmation);
             };
         }
         internal void SetIdleText(string message) {
@@ -298,11 +312,12 @@ namespace LocalHdrMenu {
         internal void Confirm(string message) {
             BeginSaving();
             confirmation=message;
-            if(!timer.Enabled) ShowConfirmation();
+            if(!timer.Enabled) ShowConfirmation(message);
         }
-        void ShowConfirmation() {
+        internal void ShowConfirmation(string message) {
+            timer.Stop();
             saving=false;
-            Text=confirmation;
+            Text=message;
             timer.Interval=DialogTheme.SavedMilliseconds;
             timer.Start();
         }
@@ -338,6 +353,25 @@ namespace LocalHdrMenu {
     }
     public class DialogListView : ListView {
         public DialogListView() { DoubleBuffered=true; }
+        protected int SortColumn=-1;
+        protected bool Descending;
+        protected override void OnColumnClick(ColumnClickEventArgs e) {
+            base.OnColumnClick(e);
+            if(!CanSortColumn(e.Column)) return;
+            SelectSortColumn(e.Column,e.Column==SortColumn && !Descending);
+            ApplyColumnSort();
+        }
+        protected void SelectSortColumn(int column,bool descending) {
+            if(SortColumn>=0) Columns[SortColumn].Text=(string)Columns[SortColumn].Tag;
+            Descending=descending;
+            SortColumn=column;
+            var header=Columns[SortColumn];
+            header.Tag=header.Text;
+            header.Text+=SortArrow;
+        }
+        protected virtual bool CanSortColumn(int column) { return column==0; }
+        protected string SortArrow { get { return Descending?" \u25bc":" \u25b2"; } }
+        protected virtual void ApplyColumnSort() { Sorting=Descending?SortOrder.Descending:SortOrder.Ascending; }
         internal virtual void FitColumns() {
             if(Columns.Count==1 && Columns[0].Width!=ClientSize.Width) Columns[0].Width=ClientSize.Width;
         }
@@ -354,20 +388,103 @@ namespace LocalHdrMenu {
             base.WndProc(ref m);
         }
     }
+    internal sealed class GitHubLink : DialogButton {
+        readonly ToolTip tip=new ToolTip();
+        public GitHubLink() {
+            Name="GitHubLink"; AccessibleName="Open repository on GitHub"; AccessibleRole=AccessibleRole.Link;
+            Size=new Size(36,36); Cursor=Cursors.Hand;
+            tip.SetToolTip(this,AccessibleName);
+        }
+        protected override void OnClick(EventArgs e) {
+            base.OnClick(e);
+            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo("https://github.com/notuxius/hdr-control") { UseShellExecute=true });
+        }
+        protected override void OnPaint(PaintEventArgs e) {
+            base.OnPaint(e);
+            // GitHub's Primer Octicons mark-github-16, in its original 16-unit coordinate space.
+            using(var mark=new GraphicsPath())
+            using(var ink=new SolidBrush(ForeColor)) {
+                mark.AddBezier(6.766f,11.328f, 4.703f,11.078f, 3.25f,9.594f, 3.25f,7.672f);
+                mark.AddBezier(3.25f,7.672f, 3.25f,6.891f, 3.531f,6.047f, 4f,5.484f);
+                mark.AddBezier(4f,5.484f, 3.797f,4.969f, 3.828f,3.875f, 4.063f,3.422f);
+                mark.AddBezier(4.063f,3.422f, 4.688f,3.344f, 5.531f,3.672f, 6.031f,4.125f);
+                mark.AddBezier(6.031f,4.125f, 6.625f,3.938f, 7.25f,3.844f, 8.016f,3.844f);
+                mark.AddBezier(8.016f,3.844f, 8.781f,3.844f, 9.406f,3.938f, 9.969f,4.109f);
+                mark.AddBezier(9.969f,4.109f, 10.453f,3.672f, 11.313f,3.344f, 11.938f,3.422f);
+                mark.AddBezier(11.938f,3.422f, 12.156f,3.844f, 12.188f,4.937f, 11.984f,5.469f);
+                mark.AddBezier(11.984f,5.469f, 12.484f,6.062f, 12.75f,6.859f, 12.75f,7.672f);
+                mark.AddBezier(12.75f,7.672f, 12.75f,9.594f, 11.297f,11.047f, 9.203f,11.312f);
+                mark.AddBezier(9.203f,11.312f, 9.734f,11.656f, 10.093f,12.406f, 10.093f,13.266f);
+                mark.AddLine(10.093f,13.266f, 10.093f,14.891f);
+                mark.AddBezier(10.093f,14.891f, 10.093f,15.359f, 10.484f,15.625f, 10.953f,15.438f);
+                mark.AddBezier(10.953f,15.438f, 13.781f,14.359f, 16f,11.53f, 16f,8.03f);
+                mark.AddBezier(16f,8.03f, 16f,3.61f, 12.406f,0f, 7.984f,0f);
+                mark.AddBezier(7.984f,0f, 3.563f,0f, 0f,3.61f, 0f,8.031f);
+                mark.AddBezier(0f,8.031f, -0.012f,11.34f, 2.054f,14.31f, 5.172f,15.453f);
+                mark.AddBezier(5.172f,15.453f, 5.594f,15.609f, 6f,15.328f, 6f,14.906f);
+                mark.AddLine(6f,14.906f, 6f,13.656f);
+                mark.AddBezier(6f,13.656f, 5.781f,13.75f, 5.5f,13.812f, 5.25f,13.812f);
+                mark.AddBezier(5.25f,13.812f, 4.219f,13.812f, 3.61f,13.25f, 3.172f,12.203f);
+                mark.AddBezier(3.172f,12.203f, 3f,11.781f, 2.812f,11.531f, 2.453f,11.484f);
+                mark.AddBezier(2.453f,11.484f, 2.266f,11.469f, 2.203f,11.391f, 2.203f,11.297f);
+                mark.AddBezier(2.203f,11.297f, 2.203f,11.109f, 2.516f,10.969f, 2.828f,10.969f);
+                mark.AddBezier(2.828f,10.969f, 3.281f,10.969f, 3.672f,11.25f, 4.078f,11.829f);
+                mark.AddBezier(4.078f,11.829f, 4.391f,12.281f, 4.718f,12.484f, 5.109f,12.484f);
+                mark.AddBezier(5.109f,12.484f, 5.5f,12.484f, 5.75f,12.344f, 6.109f,11.984f);
+                mark.AddBezier(6.109f,11.984f, 6.375f,11.719f, 6.579f,11.484f, 6.766f,11.328f);
+                mark.CloseFigure();
+                var state=e.Graphics.Save();
+                float size=Math.Min(Width,Height)*2f/3f;
+                e.Graphics.SmoothingMode=SmoothingMode.AntiAlias;
+                e.Graphics.TranslateTransform((Width-size)/2,(Height-size)/2);
+                e.Graphics.ScaleTransform(size/16,size/16);
+                e.Graphics.FillPath(ink,mark); e.Graphics.Restore(state);
+            }
+        }
+        protected override void Dispose(bool disposing) {
+            if(disposing) tip.Dispose();
+            base.Dispose(disposing);
+        }
+    }
     public sealed class DialogMessageForm : DialogForm {
         public readonly Label MessageText=new Label();
-        public DialogMessageForm(string message,MessageBoxButtons buttons) {
+        public readonly DialogButton CheckUpdates;
+        readonly SaveStatusLabel updateStatus;
+        public void SetAvailableVersion(string version) {
+            updateStatus.SetIdleText(String.IsNullOrEmpty(version)?"":"Version "+version+" available");
+            updateStatus.ClearFeedback();
+        }
+        public void SetUpToDate(bool current) {
+            if(current) updateStatus.ShowConfirmation("\u2713 Up to date");
+            else updateStatus.ClearFeedback();
+        }
+        public DialogMessageForm(string message,MessageBoxButtons buttons) : this(message,buttons,null) {}
+        public DialogMessageForm(string message,MessageBoxButtons buttons,string version) {
             Text="HDR Control"; Font=new Font("Segoe UI",10);
             AutoScaleDimensions=new SizeF(96,96); AutoScaleMode=AutoScaleMode.Dpi;
             StartPosition=FormStartPosition.CenterScreen; MinimizeBox=false; MaximizeBox=false;
             FormBorderStyle=FormBorderStyle.FixedDialog;
             int textHeight=TextRenderer.MeasureText(message,Font,new Size(512,0),TextFormatFlags.WordBreak|TextFormatFlags.NoPrefix).Height;
-            ClientSize=new Size(560,Math.Max(220,Math.Min(600,textHeight+160)));
-            var title=DialogTheme.Heading("HDR Control",24,20,512);
-            var body=new Panel {Bounds=new Rectangle(24,76,512,ClientSize.Height-160),AutoScroll=true,Anchor=AnchorStyles.Top|AnchorStyles.Bottom|AnchorStyles.Left|AnchorStyles.Right};
+            bool about=!String.IsNullOrEmpty(version);
+            int statusHeight=about?28:0;
+            ClientSize=new Size(560,Math.Max(220,Math.Min(600,textHeight+160+(about?100:0)+statusHeight)));
+            int contentLeft=about?16:24;
+            // The larger heading font adds more leading space before its first visible stroke.
+            var title=DialogTheme.Heading("HDR Control",about?contentLeft-5:contentLeft,20,512);
+            var body=new Panel {Bounds=new Rectangle(contentLeft,76,512,ClientSize.Height-160-statusHeight),AutoScroll=true,Anchor=AnchorStyles.Top|AnchorStyles.Bottom|AnchorStyles.Left|AnchorStyles.Right};
             MessageText.Text=message; MessageText.UseMnemonic=false; MessageText.AutoSize=true; MessageText.MaximumSize=new Size(490,0);
-            body.Controls.Add(MessageText);
-            var footer=new FlowLayoutPanel {Dock=DockStyle.Bottom,Height=72,Padding=new Padding(16),FlowDirection=FlowDirection.RightToLeft,WrapContents=false};
+            if(about) {
+                var column=new FlowLayoutPanel { AutoSize=true, FlowDirection=FlowDirection.TopDown, WrapContents=false };
+                var versionLabel=new Label { Name="VersionLabel", Text="Version: "+version, AutoSize=true,
+                    Margin=new Padding(0,0,0,12) };
+                column.Controls.Add(versionLabel);
+                MessageText.Margin=Padding.Empty;
+                column.Controls.Add(MessageText);
+                column.Controls.Add(new GitHubLink { Margin=new Padding(0,8,0,0) });
+                body.Controls.Add(column);
+            } else body.Controls.Add(MessageText);
+            int buttonRow=about?1:0;
+            var footer=new TableLayoutPanel {Dock=DockStyle.Bottom,Height=72+statusHeight,Padding=new Padding(16),RowCount=buttonRow+1};
             DialogResult[] results;
             switch(buttons) {
                 case MessageBoxButtons.OK: results=new[]{DialogResult.OK}; break;
@@ -377,9 +494,19 @@ namespace LocalHdrMenu {
                 case MessageBoxButtons.RetryCancel: results=new[]{DialogResult.Retry,DialogResult.Cancel}; break;
                 default: throw new ArgumentOutOfRangeException("buttons");
             }
-            for(int i=results.Length-1;i>=0;i--) {
+            footer.ColumnCount=results.Length+1;
+            if(about) {
+                footer.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+                updateStatus=new SaveStatusLabel { Name="UpdateStatus", Size=new Size(180,statusHeight), TextAlign=ContentAlignment.MiddleLeft, Margin=Padding.Empty };
+                footer.Controls.Add(updateStatus,0,0);
+                CheckUpdates=new DialogButton { Text="Check for updates", Size=new Size(180,36), Margin=Padding.Empty };
+                footer.Controls.Add(CheckUpdates,0,buttonRow);
+            }
+            footer.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,100));
+            for(int i=0;i<results.Length;i++) {
+                footer.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
                 var button=new DialogButton {Text=results[i].ToString(),DialogResult=results[i],Size=new Size(104,36),Margin=new Padding(6,0,0,0),Primary=i==0,TabIndex=i};
-                footer.Controls.Add(button);
+                footer.Controls.Add(button,i+1,buttonRow);
                 if(i==0) AcceptButton=button;
                 if(i==results.Length-1) CancelButton=button;
             }
@@ -614,7 +741,7 @@ namespace LocalHdrMenu {
             base.WndProc(ref m);
         }
     }
-    public sealed class DialogButton : Button {
+    public class DialogButton : Button {
         public bool Primary;
         public int StepGlyph;
         bool hovering,pressed;
@@ -647,6 +774,54 @@ namespace LocalHdrMenu {
         }
     }
     public sealed class DialogTabs : Panel {
+        [DllImport("dwmapi.dll")] static extern int DwmFlush();
+        // The list, tab strip and footer have separate HWNDs. Keep the last
+        // client frame visible until all three have painted the new selection.
+        sealed class TabCover : Form {
+            [DllImport("user32.dll")] static extern bool PrintWindow(IntPtr window,IntPtr dc,uint flags);
+            readonly Bitmap frame;
+            TabCover(Rectangle bounds) {
+                FormBorderStyle=FormBorderStyle.None; ShowInTaskbar=false;
+                StartPosition=FormStartPosition.Manual; Bounds=bounds;
+                frame=new Bitmap(bounds.Width,bounds.Height);
+                SetStyle(ControlStyles.Opaque,true);
+            }
+            protected override bool ShowWithoutActivation { get { return true; } }
+            protected override void OnHandleCreated(EventArgs e) {
+                base.OnHandleCreated(e);
+                // Remove the held frame immediately so it cannot fade over the new tab's text.
+                DialogForm.DisableWindowTransitions(Handle);
+            }
+            protected override CreateParams CreateParams {
+                get { var p=base.CreateParams; p.ExStyle|=0x08000080; return p; } // NOACTIVATE | TOOLWINDOW
+            }
+            protected override void WndProc(ref Message m) {
+                if(m.Msg==0x0084) { m.Result=new IntPtr(-1); return; } // HTTRANSPARENT
+                base.WndProc(ref m);
+            }
+            protected override void OnPaint(PaintEventArgs e) { e.Graphics.DrawImageUnscaled(frame,0,0); }
+            protected override void Dispose(bool disposing) {
+                base.Dispose(disposing);
+                if(disposing && frame!=null) frame.Dispose();
+            }
+            internal static TabCover Hold(Form owner) {
+                if(owner==null || !owner.ContainsFocus || !owner.Visible || owner.WindowState==FormWindowState.Minimized) return null;
+                var bounds=owner.RectangleToScreen(owner.ClientRectangle);
+                if(bounds.Width<=0 || bounds.Height<=0 || !Screen.FromControl(owner).Bounds.IntersectsWith(bounds)) return null;
+                var cover=new TabCover(bounds);
+                try {
+                    bool copied;
+                    using(var graphics=Graphics.FromImage(cover.frame)) {
+                        var dc=graphics.GetHdc();
+                        try { copied=PrintWindow(owner.Handle,dc,3); } // CLIENTONLY | RENDERFULLCONTENT
+                        finally { graphics.ReleaseHdc(dc); }
+                    }
+                    if(!copied) { cover.Dispose(); return null; }
+                    cover.Show(owner); cover.Update(); DwmFlush();
+                    return cover;
+                } catch { cover.Dispose(); throw; }
+            }
+        }
         public sealed class Pages : System.Collections.ObjectModel.Collection<Panel> {
             readonly DialogTabs owner;
             internal Pages(DialogTabs owner) { this.owner=owner; }
@@ -657,19 +832,51 @@ namespace LocalHdrMenu {
         readonly System.Collections.Generic.List<DialogButton> buttons=new System.Collections.Generic.List<DialogButton>();
         int selected=-1;
         public event EventHandler SelectedIndexChanged;
-        public DialogTabs() { TabPages=new Pages(this); AccessibleRole=AccessibleRole.PageTabList; }
+        readonly bool redrawStrip;
+        public DialogTabs() : this(false) { }
+        internal DialogTabs(bool redrawStrip) {
+            this.redrawStrip=redrawStrip;
+            TabPages=new Pages(this); AccessibleRole=AccessibleRole.PageTabList;
+        }
+        // Composite the child windows only while swapping game tabs. Keeping this
+        // style on during wheel input also buffers every list repaint at the parent.
+        bool swappingPages;
+        protected override CreateParams CreateParams {
+            get {
+                var parameters=base.CreateParams;
+                if(swappingPages) parameters.ExStyle|=0x02000000; // WS_EX_COMPOSITED
+                return parameters;
+            }
+        }
         public int SelectedIndex {
             get { return selected; }
             set {
                 if(value<0 || value>=TabPages.Count || value==selected) return;
                 int previous=selected;
-                SuspendLayout();
-                try {
-                    selected=value;
-                    if(previous>=0) { TabPages[previous].Visible=false; buttons[previous].Primary=false; buttons[previous].Invalidate(); }
-                    TabPages[value].Visible=true; buttons[value].Primary=true; buttons[value].Invalidate();
-                } finally { ResumeLayout(true); }
-                if(SelectedIndexChanged!=null) SelectedIndexChanged(this,EventArgs.Empty);
+                var window=TopLevelControl as Form;
+                // Start the list swap on a frame boundary so the old
+                // empty-state caption and the new list header don't paint apart.
+                bool paintStrip=redrawStrip && IsHandleCreated && Visible;
+                using(var cover=!redrawStrip && IsHandleCreated && Visible ? TabCover.Hold(window) : null) {
+                    try {
+                        if(paintStrip) { DwmFlush(); swappingPages=true; UpdateStyles(); }
+                        SuspendLayout();
+                        try {
+                            selected=value;
+                            TabPages[value].Visible=true;
+                            TabPages[value].BringToFront();
+                            if(previous>=0) { TabPages[previous].Visible=false; buttons[previous].Primary=false; buttons[previous].Invalidate(); }
+                            buttons[value].Primary=true; buttons[value].Invalidate();
+                        } finally { ResumeLayout(true); }
+                        if(SelectedIndexChanged!=null) SelectedIndexChanged(this,EventArgs.Empty);
+                        if(paintStrip && IsHandleCreated && Visible)
+                            DialogForm.RedrawWindow(Handle,IntPtr.Zero,IntPtr.Zero,0x0185); // INVALIDATE | ERASE | ALLCHILDREN | UPDATENOW
+                        else if(!redrawStrip && Visible && window!=null && window.IsHandleCreated)
+                            DialogForm.RedrawWindow(window.Handle,IntPtr.Zero,IntPtr.Zero,cover==null?0x0180u:0x0585u);
+                    } finally {
+                        if(paintStrip) { swappingPages=false; if(IsHandleCreated) UpdateStyles(); }
+                    }
+                }
             }
         }
         void AddPage(Panel page) {
@@ -708,7 +915,72 @@ namespace LocalHdrMenu {
                 return parameters;
             }
         }
+        // ListViewItem.Checked queries the native item at its last virtual index.
+        // Keep the rule state with the executable while a sort rearranges indices.
+        internal sealed class GameRow {
+            public readonly string Executable,Status,Detected;
+            public readonly bool Enabled,CanRemove;
+            ListViewItem item;
+            public GameRow(string executable,string status,string detected,bool enabled,bool canRemove) {
+                Executable=executable??""; Status=status??""; Detected=detected??"";
+                Enabled=enabled; CanRemove=canRemove;
+            }
+            public ListViewItem Item { get {
+                if(item==null) item=new ListViewItem(new[]{"",Executable,Status,Detected,"\u2022\u2022\u2022"}) { Checked=Enabled };
+                return item;
+            } }
+            public string ColumnText(int column) {
+                if(column==GameListView.ExecutableColumn) return Executable;
+                if(column==GameListView.DetectedColumn) return Detected;
+                return Status;
+            }
+            public GameRow WithEnabled(bool value) {
+                return new GameRow(Executable,Status,Detected,value,CanRemove);
+            }
+        }
         internal sealed class GameListView : DialogListView {
+            [DllImport("user32.dll")] static extern bool ShowScrollBar(IntPtr window,int bar,bool show);
+            [StructLayout(LayoutKind.Sequential)]
+            struct ItemRect { public int Left,Top,Right,Bottom; }
+            [DllImport("user32.dll",EntryPoint="SendMessageW")] static extern IntPtr GetItemRectangle(IntPtr window,int message,IntPtr index,ref ItemRect rect);
+            [DllImport("user32.dll")] static extern IntPtr SendMessage(IntPtr window,int message,IntPtr wparam,IntPtr lparam);
+            // ColumnClick supplies only a column index. Keep the native header's
+            // mouse-down target until it finishes dispatching the click.
+            sealed class HeaderInput : NativeWindow {
+                readonly GameListView list;
+                public bool OnCheck;
+                public HeaderInput(GameListView list) { this.list=list; }
+                protected override void WndProc(ref Message m) {
+                    if(m.Msg==0x201 || m.Msg==0x203) {
+                        int x=(short)m.LParam.ToInt64();
+                        OnCheck=x>=0 && x<list.CheckSlot;
+                    }
+                    base.WndProc(ref m);
+                    if(m.Msg==0x202) OnCheck=false;
+                }
+            }
+            internal System.Collections.Generic.List<GameRow> Games;
+            GameListAutomation automation;
+            internal int RowsPerViewport { get { return SendMessage(Handle,0x1028 /* LVM_GETCOUNTPERPAGE */,IntPtr.Zero,IntPtr.Zero).ToInt32(); } }
+            internal void ActivateGame() { OnItemActivate(EventArgs.Empty); }
+            [DllImport("UIAutomationCore.dll")]
+            static extern IntPtr UiaReturnRawElementProvider(IntPtr hwnd,IntPtr wparam,IntPtr lparam,IntPtr provider);
+            HeaderInput header;
+            protected override void OnHandleCreated(EventArgs e) {
+                base.OnHandleCreated(e);
+                header=new HeaderInput(this);
+                header.AssignHandle(SendMessage(Handle,0x101f /* LVM_GETHEADER */,IntPtr.Zero,IntPtr.Zero));
+                if(Parent!=null) Parent.PerformLayout();
+            }
+            protected override void OnHandleDestroyed(EventArgs e) {
+                if(automation!=null) {
+                    UiaReturnRawElementProvider(Handle,IntPtr.Zero,IntPtr.Zero,IntPtr.Zero);
+                    automation=null;
+                }
+                if(header!=null && header.Handle!=IntPtr.Zero) header.ReleaseHandle();
+                header=null;
+                base.OnHandleDestroyed(e);
+            }
             [StructLayout(LayoutKind.Sequential)]
             struct NotifyHeader { public IntPtr Window,Id; public int Code; }
             [StructLayout(LayoutKind.Sequential)]
@@ -720,36 +992,168 @@ namespace LocalHdrMenu {
                 public IntPtr Item;
             }
             // WinForms' Details painter looks up a virtual item several times per
-            // cell. Paint its three columns together at CDDS_ITEMPREPAINT.
+            // cell. Paint its columns together at CDDS_ITEMPREPAINT.
             bool DrawGameRow(ref Message message) {
                 if(Marshal.ReadInt32(message.LParam,2*IntPtr.Size)!=-12 /* NM_CUSTOMDRAW */) return false;
                 var draw=(CustomDraw)Marshal.PtrToStructure(message.LParam,typeof(CustomDraw));
+                if(draw.Stage==1 /* CDDS_PREPAINT */) {
+                    base.WndProc(ref message);
+                    message.Result=(IntPtr)(message.Result.ToInt64()|0x10 /* CDRF_NOTIFYPOSTPAINT */);
+                    return true;
+                }
+                if(draw.Stage==2 /* CDDS_POSTPAINT */ && VirtualListSize>0) {
+                    // End the table at its last row and blend the unused area into the page.
+                    int top=GetItemRect(VirtualListSize-1).Bottom;
+                    if(top<ClientSize.Height) {
+                        using(var graphics=Graphics.FromHdc(draw.DC))
+                        using(var brush=new SolidBrush(DialogTheme.Background))
+                            graphics.FillRectangle(brush,0,top,ClientSize.Width,ClientSize.Height-top);
+                    }
+                    message.Result=IntPtr.Zero;
+                    return true;
+                }
                 if(draw.Stage!=0x10001 /* CDDS_ITEMPREPAINT */) return false;
                 int index=draw.Item.ToInt32();
                 if(index<0 || index>=VirtualListSize) return false;
                 var item=Items[index];
                 bool selected=item.Selected;
                 var row=Rectangle.FromLTRB(draw.Left,draw.Top,draw.Right,draw.Bottom);
-                int slot=GetItemRect(index,ItemBoundsPortion.Label).Left-row.Left;
                 using(var graphics=Graphics.FromHdc(draw.DC))
+                using(var divider=new Pen(DialogTheme.Border))
                 using(var brush=new SolidBrush(selected?DialogTheme.Selection:DialogTheme.Surface)) {
                     graphics.FillRectangle(brush,row);
                     var cell=row;
                     for(int column=0;column<Columns.Count;column++) {
                         cell.Width=Columns[column].Width;
-                        DialogTheme.DrawListCell(this,graphics,item,column,cell,selected,column==0?slot:0);
+                        if(column==ActionsColumn)
+                            TextRenderer.DrawText(graphics,item.SubItems[column].Text,Font,cell,DialogTheme.Text,
+                                TextFormatFlags.HorizontalCenter|TextFormatFlags.VerticalCenter|TextFormatFlags.SingleLine);
+                        else DialogTheme.DrawListCell(this,graphics,item,column,cell,column==0?CheckSlot:0);
+                        if(column<ActionsColumn) DrawColumnDivider(graphics,divider,cell);
                         cell.X+=cell.Width;
                     }
+                    graphics.DrawLine(divider,row.Left,row.Bottom-1,cell.X-1,row.Bottom-1);
                 }
                 message.Result=(IntPtr)4; // CDRF_SKIPDEFAULT
                 return true;
             }
             public Action<ListViewItem> Toggle;
-            public Action<ListViewItem,Point> OpenMenu;
+            internal const int ExecutableColumn=1, DetectedColumn=3, ActionsColumn=4;
+            public Action ToggleAll;
+            public Action<bool> SortRows;
+            int CheckSlot { get { return Math.Max(24,Font.Height*3/2); } }
+            int ArrowHalfWidth { get { return Math.Max(5,Font.Height/4); } }
+            CheckState headerState;
+            public bool SortedByEnabled { get { return SortColumn==0; } }
+            public void SetHeaderState(CheckState state) {
+                headerState=state;
+                string title=DialogTheme.CheckMark(state);
+                Columns[0].Tag=title;
+                Columns[0].Text=title+(SortedByEnabled?SortArrow:"");
+            }
+            static void DrawColumnDivider(Graphics graphics,Pen pen,Rectangle cell) {
+                graphics.DrawLine(pen,cell.Right-2,cell.Top,cell.Right-2,cell.Bottom-1);
+            }
+            internal void DrawHeader(DrawListViewColumnHeaderEventArgs e) {
+                var cell=e.Bounds;
+                var graphics=e.Graphics;
+                bool contrast=SystemInformation.HighContrast;
+                Color ink=contrast?SystemColors.ControlText:DialogTheme.Muted;
+                using(var fill=new SolidBrush(contrast?SystemColors.Control:DialogTheme.Surface)) graphics.FillRectangle(fill,cell);
+                using(var divider=new Pen(contrast?SystemColors.ControlDark:DialogTheme.Border)) {
+                    if(e.ColumnIndex<ActionsColumn) DrawColumnDivider(graphics,divider,cell);
+                    graphics.DrawLine(divider,cell.Left,cell.Bottom-1,cell.Right-1,cell.Bottom-1);
+                }
+                var label=cell;
+                label.Inflate(e.ColumnIndex==ActionsColumn?-4:-12,0);
+                bool sorted=e.ColumnIndex==SortColumn;
+                string title=sorted?(string)e.Header.Tag:e.Header.Text;
+                if(e.ColumnIndex==0) {
+                    int side=(int)Math.Round(16*graphics.DpiX/96f);
+                    var box=new Rectangle(cell.Left+(CheckSlot-side)/2,cell.Top+(cell.Height-side)/2,side,side);
+                    if(contrast) {
+                        var state=headerState==CheckState.Unchecked?ButtonState.Normal:ButtonState.Checked;
+                        if(VirtualListSize==0) state|=ButtonState.Inactive;
+                        if(headerState==CheckState.Indeterminate) ControlPaint.DrawMixedCheckBox(graphics,box,state);
+                        else ControlPaint.DrawCheckBox(graphics,box,state);
+                    } else DialogTheme.DrawCheck(graphics,box,headerState,VirtualListSize>0,false,false);
+                }
+                if(sorted) {
+                    int half=ArrowHalfWidth, height=half+1;
+                    int right=cell.Right-half-4, top=cell.Top+(cell.Height-height)/2;
+                    int baseY=Descending?top:top+height;
+                    using(var fill=new SolidBrush(ink)) graphics.FillPolygon(fill,new[]{
+                        new Point(right-2*half,baseY),new Point(right,baseY),
+                        new Point(right-half,Descending?top+height:top)});
+                    label.Width=Math.Max(0,right-2*half-4-label.Left);
+                }
+                var flags=TextFormatFlags.VerticalCenter|TextFormatFlags.EndEllipsis|TextFormatFlags.NoPrefix|TextFormatFlags.SingleLine;
+                if(e.Header.TextAlign==HorizontalAlignment.Center) flags|=TextFormatFlags.HorizontalCenter;
+                if(e.ColumnIndex!=0 && label.Width>0) TextRenderer.DrawText(graphics,title,Font,label,ink,flags);
+            }
+            protected override void OnColumnClick(ColumnClickEventArgs e) {
+                CommitSingleClick();
+                if(e.Column==0 && header!=null && header.OnCheck) {
+                    if(ToggleAll!=null) ToggleAll();
+                    return;
+                }
+                base.OnColumnClick(e);
+            }
+            protected override bool CanSortColumn(int column) { return column>=0 && column<=DetectedColumn; }
+            protected override void ApplyColumnSort() {
+                SortRows(false);
+                if(settingsKey==null) return;
+                try {
+                    Registry.SetValue(settingsKey,sortValue,new[]{Columns[SortColumn].Name,Descending?"Descending":"Ascending"},RegistryValueKind.MultiString);
+                } catch(UnauthorizedAccessException) { } catch(System.Security.SecurityException) { } catch(System.IO.IOException) { }
+            }
+            void RestoreSort() {
+                string[] saved=null;
+                if(settingsKey!=null) {
+                    try { saved=Registry.GetValue(settingsKey,sortValue,null) as string[]; }
+                    catch(UnauthorizedAccessException) { } catch(System.Security.SecurityException) { } catch(System.IO.IOException) { }
+                }
+                if(saved!=null && saved.Length==2 && (saved[1]=="Ascending" || saved[1]=="Descending")) {
+                    int column=Columns.IndexOfKey(saved[0]);
+                    if(CanSortColumn(column)) {
+                        SelectSortColumn(column,saved[1]=="Descending");
+                        return;
+                    }
+                }
+                SelectSortColumn(ExecutableColumn,false);
+            }
+            public void SortGames(System.Collections.Generic.List<GameRow> games) {
+                if(SortColumn<0) return;
+                games.Sort(delegate(GameRow a,GameRow b) {
+                    string left=a.ColumnText(SortColumn),right=b.ColumnText(SortColumn);
+                    int order;
+                    if(SortedByEnabled) order=b.Enabled.CompareTo(a.Enabled);
+                    else if(SortColumn==DetectedColumn) {
+                        DateTime x,y;
+                        DateTime.TryParse(left,out x); DateTime.TryParse(right,out y);
+                        order=x.CompareTo(y);
+                    } else order=StringComparer.OrdinalIgnoreCase.Compare(left,right);
+                    if(order==0) order=StringComparer.OrdinalIgnoreCase.Compare(a.Executable,b.Executable);
+                    return Descending ? -order : order;
+                });
+            }
+            public Action<ListViewItem,Point,bool> OpenMenu;
             readonly System.Windows.Forms.Timer singleClickTimer=new System.Windows.Forms.Timer();
             ListViewItem pendingCheck;
-            public GameListView() {
+            readonly string settingsKey,sortValue;
+            public GameListView(string settingsKey,string section) {
+                this.settingsKey=settingsKey;
+                // Keep the saved sort order from before the Installed tab was renamed.
+                sortValue="GameListSort."+(section=="Installed" ? "Defaults" : section);
                 VirtualMode=true; CheckBoxes=true;
+                Columns.Add("Enabled",""); Columns.Add("Executable","Executable"); Columns.Add("Status","Status"); Columns.Add("Detected","First detected");
+                Columns.Add("More",48,HorizontalAlignment.Center);
+                RestoreSort();
+                if(SystemInformation.HighContrast) {
+                    OwnerDraw=true;
+                    DrawColumnHeader+=delegate(object sender,DrawListViewColumnHeaderEventArgs e) { DrawHeader(e); };
+                    DrawItem+=delegate(object sender,DrawListViewItemEventArgs e) { e.DrawDefault=true; };
+                }
                 singleClickTimer.Tick+=delegate { CommitSingleClick(); };
             }
             public void CommitSingleClick() {
@@ -769,7 +1173,12 @@ namespace LocalHdrMenu {
             // Native virtual lists expose the stored check state, but do not own it.
             // Request the change against the clicked executable on the tray thread.
             protected override void WndProc(ref Message m) {
-                if(m.Msg==0x204e /* reflected WM_NOTIFY */ && OwnerDraw && DrawGameRow(ref m)) return;
+                if(m.Msg==0x003d /* WM_GETOBJECT */ && unchecked((int)m.LParam.ToInt64())==System.Windows.Automation.Provider.AutomationInteropProvider.RootObjectId) {
+                    if(automation==null) automation=new GameListAutomation(this);
+                    m.Result=System.Windows.Automation.Provider.AutomationInteropProvider.ReturnRawElementProvider(Handle,m.WParam,m.LParam,automation);
+                    return;
+                }
+                if(m.Msg==0x204e /* reflected WM_NOTIFY */ && OwnerDraw && !SystemInformation.HighContrast && DrawGameRow(ref m)) return;
                 if(m.Msg==0x0201 || m.Msg==0x0203 || m.Msg==0x007b) { // left down/double-click, context menu
                     int point=unchecked((int)m.LParam.ToInt64());
                     Point p=new Point((short)point,(short)(point>>16));
@@ -779,12 +1188,20 @@ namespace LocalHdrMenu {
                         var item=point==-1 ? FocusedItem : ClientRectangle.Contains(local) ? HitTest(local).Item : null;
                         if(item!=null && OpenMenu!=null) {
                             item.Selected=item.Focused=true;
-                            OpenMenu(item,point==-1 ? new Point(12,item.Bounds.Bottom) : local);
+                            OpenMenu(item,point==-1 ? new Point(12,item.Bounds.Bottom) : local,false);
                         }
                         return;
                     }
                     var hit=HitTest(p);
-                    bool onCheck=(hit.Location & ListViewHitTestLocations.StateImage)!=0;
+                    if(hit.Item!=null && hit.SubItem==hit.Item.SubItems[ActionsColumn]) {
+                        CommitSingleClick();
+                        Focus();
+                        hit.Item.Selected=hit.Item.Focused=true;
+                        var cell=hit.SubItem.Bounds;
+                        OpenMenu(hit.Item,new Point(cell.Right,cell.Bottom),true);
+                        return;
+                    }
+                    bool onCheck=hit.Item!=null && p.X>=hit.Item.Bounds.Left && p.X<hit.Item.Bounds.Left+CheckSlot;
                     if(m.Msg==0x0203) {
                         singleClickTimer.Stop();
                         pendingCheck=null;
@@ -807,6 +1224,14 @@ namespace LocalHdrMenu {
                     }
                 }
                 base.WndProc(ref m);
+                // Wheel, scrollbar, keyboard, EnsureVisible, programmatic scroll and resize can move the viewport.
+                if(automation!=null && (m.Msg==0x0115 || m.Msg==0x020a || m.Msg==0x0100 || m.Msg==0x1013 || m.Msg==0x1014 || m.Msg==0x0005))
+                    automation.ViewChanged(false);
+            }
+            internal void AutomationRowsChanged() { if(automation!=null) automation.ViewChanged(true); }
+            protected override void OnSelectedIndexChanged(EventArgs e) {
+                base.OnSelectedIndexChanged(e);
+                if(automation!=null) automation.SelectionChanged();
             }
             protected override void OnKeyDown(KeyEventArgs e) {
                 CommitSingleClick();
@@ -815,140 +1240,193 @@ namespace LocalHdrMenu {
                     if(Toggle!=null) Toggle(Items[SelectedIndices[0]]);
                 } else base.OnKeyDown(e);
             }
+            protected override void SetBoundsCore(int x,int y,int width,int height,BoundsSpecified specified) {
+                if(IsHandleCreated && VirtualListSize>0) {
+                    // Dock to whole rows so the scrollbar ends level with the final game.
+                    var first=new ItemRect();
+                    if(GetItemRectangle(Handle,0x100e /* LVM_GETITEMRECT */,IntPtr.Zero,ref first)!=IntPtr.Zero) {
+                        int rowHeight=first.Bottom-first.Top;
+                        if(rowHeight>0 && height>=2*rowHeight && height>=first.Top)
+                            height-=(height-first.Top)%rowHeight;
+                    }
+                }
+                base.SetBoundsCore(x,y,width,height,specified);
+            }
             internal override void FitColumns() {
-                if(Columns.Count!=3) return;
-                int width=ClientSize.Width;
+                if(Columns.Count!=5) return;
+                // Reserve the scrollbar gutter on every tab, even when its list is short.
+                int border=BorderStyle==BorderStyle.Fixed3D ? SystemInformation.Border3DSize.Width*2 : 0;
+                if(Parent!=null) {
+                    var padding=Parent.Padding;
+                    int scrollbar=Math.Max(0,Width-ClientSize.Width-border);
+                    int right=padding.Left+Math.Max(0,SystemInformation.VerticalScrollBarWidth-scrollbar);
+                    if(padding.Right!=right) Parent.Padding=new Padding(padding.Left,padding.Top,right,padding.Bottom);
+                }
+                int available=ClientSize.Width;
+                int actions=Math.Min(available,Math.Max(40,Font.Height*3));
+                int check=Math.Min(available-actions,CheckSlot+3*ArrowHalfWidth+6);
+                int width=available-actions-check;
                 int executable=width*44/100, status=width*34/100;
-                Columns[0].Width=executable;
-                Columns[1].Width=status;
-                Columns[2].Width=width-executable-status;
+                if(Columns[0].Width!=check) Columns[0].Width=check;
+                if(Columns[ExecutableColumn].Width!=executable) Columns[ExecutableColumn].Width=executable;
+                if(Columns[2].Width!=status) Columns[2].Width=status;
+                if(Columns[DetectedColumn].Width!=width-executable-status) Columns[DetectedColumn].Width=width-executable-status;
+                if(Columns[ActionsColumn].Width!=actions) Columns[ActionsColumn].Width=actions;
+                // The native control can retain a scrollbar from an intermediate
+                // column width even after all columns fit the viewport.
+                if(IsHandleCreated) ShowScrollBar(Handle,0 /* SB_HORZ */,false);
+            }
+            protected override void OnColumnWidthChanging(ColumnWidthChangingEventArgs e) {
+                base.OnColumnWidthChanging(e);
+                e.NewWidth=Columns[e.ColumnIndex].Width;
+                e.Cancel=true;
             }
         }
         public readonly Button RefreshButton = new DialogButton();
-        public readonly Button RemoveButton = new DialogButton();
-        public event Action<string,bool> EnableRequested;
+        public readonly ToolStripMenuItem RemoveButton=new ToolStripMenuItem("Remove game");
+        public event Action<string[],bool> EnableRequested;
         internal bool AllowToggle=true;
         public bool CanRemoveSelected { get {
             int i=tabs.SelectedIndex;
-            return !String.IsNullOrEmpty(SelectedExecutable) && (bool)rows[i][lists[i].SelectedIndices[0]].Tag;
+            return !String.IsNullOrEmpty(SelectedExecutable) && rows[i][lists[i].SelectedIndices[0]].CanRemove;
         } }
         public readonly Button EditCustomButton = new DialogButton();
         public readonly Button UpdateCommunityButton = new DialogButton();
         public readonly CheckBox UseCommunityApps = new DialogCheckBox { Text="Use community app list" };
-        public readonly Button AddRunningButton = new DialogButton(), AddGameButton = new DialogButton(), EditRuleButton = new DialogButton(), LaunchButton = new DialogButton(), ShortcutButton = new DialogButton();
+        public readonly Button AddRunningButton = new DialogButton(), AddGameButton = new DialogButton();
+        public readonly ToolStripMenuItem EditRuleButton=new ToolStripMenuItem("Game settings"), LaunchButton=new ToolStripMenuItem("Launch with HDR"), ShortcutButton=new ToolStripMenuItem("Create shortcut");
         public string SelectedExecutable { get {
             int index=tabs.SelectedIndex;
             if(index<0 || index>=lists.Length || lists[index]==null) return "";
             var selected=lists[index].SelectedIndices;
-            return selected.Count==1 && selected[0]<rows[index].Count ? rows[index][selected[0]].Text : "";
+            if(selected.Count!=1) return "";
+            int row=selected[0];
+            return row<rows[index].Count ? rows[index][row].Executable : "";
         } }
-        readonly DialogTabs tabs = new DialogTabs();
-        readonly string[] sections = { "Auto-detected", "Defaults", "Custom" };
+        readonly DialogTabs tabs = new DialogTabs(true);
+        readonly string[] sections = { "Auto-detected", "Installed", "Custom" };
         readonly int[] enabledCounts = new int[3];
         readonly GameListView[] lists = new GameListView[3];
         readonly string[] savedSelection=new string[3];
         readonly int[] savedTop=new int[3];
         readonly ContextMenuStrip itemMenu=new ContextMenuStrip();
-        readonly System.Collections.Generic.List<ListViewItem>[] rows = new System.Collections.Generic.List<ListViewItem>[3];
+        readonly System.Collections.Generic.List<GameRow>[] rows = new System.Collections.Generic.List<GameRow>[3];
         readonly Label[] emptyStates = new Label[3];
-
-        public GameListsForm() : this(null) { }
-        internal GameListsForm(Panel footer) {
+        public GameListsForm() : this(null,null) { }
+        internal GameListsForm(Panel footer,string settingsKey) {
             Text="Game lists"; Font=new Font("Segoe UI",10);
             AutoScaleDimensions=new SizeF(96,96); AutoScaleMode=AutoScaleMode.Dpi;
             ClientSize=new Size(880,footer==null?660:660-SettingsFooterHeight); MinimumSize=footer==null?new Size(896,699):Size.Empty;
             StartPosition=FormStartPosition.CenterScreen;
-            DialogTheme.AddSettingsHeader(this,Text,"Check a game to enable automatic HDR. Right-click it for more actions.");
+            DialogTheme.AddSettingsHeader(this,Text,"Click the header checkbox to toggle all games in this tab. Click just to its right to sort by check state.");
             itemMenu.Renderer=new TrayMenuRenderer(); itemMenu.ShowImageMargin=false;
             itemMenu.Font=Font; itemMenu.MinimumSize=new Size(180,0);
+            TrayMenuTheme.ApplyCorners(itemMenu);
             var toggle=itemMenu.Items.Add("Disable game");
-            itemMenu.Items.Add(new ToolStripSeparator());
-            foreach(var button in new Button[]{EditRuleButton,LaunchButton,ShortcutButton,RemoveButton}) {
-                var action=button;
-                itemMenu.Items.Add("",null,delegate {action.PerformClick();});
-            }
+            var separator=new ToolStripSeparator();
+            itemMenu.Items.AddRange(new ToolStripItem[]{separator,EditRuleButton,LaunchButton,ShortcutButton,RemoveButton});
             toggle.Click+=delegate {
                 var list=lists[tabs.SelectedIndex];
                 if(list.SelectedIndices.Count==1) list.Toggle(list.Items[list.SelectedIndices[0]]);
             };
             Disposed+=delegate {itemMenu.Dispose();};
-            tabs.SetBounds(24,166,832,308);
+            tabs.SetBounds(24,142,832,444);
             tabs.Anchor=AnchorStyles.Top|AnchorStyles.Bottom|AnchorStyles.Left|AnchorStyles.Right;
             for (int i=0;i<sections.Length;i++) {
-                var page=new Panel {Text=sections[i],Padding=new Padding(12)};
+                var page=new Panel {Text=sections[i],Padding=new Padding(8,4,8,28)};
                 int section=i;
-                rows[i]=new System.Collections.Generic.List<ListViewItem>();
-                var list=new GameListView { Dock=DockStyle.Fill, View=View.Details,
+                rows[i]=new System.Collections.Generic.List<GameRow>();
+                var list=new GameListView(settingsKey,sections[i]) { Dock=DockStyle.Fill, View=View.Details,
                     FullRowSelect=true, HideSelection=false, MultiSelect=false, AccessibleName=sections[i]+" games" };
                 // Hidden tabs otherwise insert every native item on their first
                 // handle creation. Virtual lists request only the visible rows.
-                list.RetrieveVirtualItem+=delegate(object sender,RetrieveVirtualItemEventArgs e) { e.Item=rows[section][e.ItemIndex]; };
+                list.Games=rows[i];
+                list.RetrieveVirtualItem+=delegate(object sender,RetrieveVirtualItemEventArgs e) { e.Item=rows[section][e.ItemIndex].Item; };
                 list.SearchForVirtualItem+=delegate(object sender,SearchForVirtualItemEventArgs e) {
                     if(!e.IsTextSearch || rows[section].Count==0) return;
                     int count=rows[section].Count, start=Math.Max(0,e.StartIndex)%count;
                     for(int offset=0;offset<count;offset++) {
                         int index=(start+offset)%count;
                         var item=rows[section][index];
-                        int columns=e.IncludeSubItemsInSearch ? item.SubItems.Count : 1;
-                        for(int column=0;column<columns;column++) {
-                            string text=item.SubItems[column].Text;
-                            if(e.IsPrefixSearch ? text.StartsWith(e.Text,StringComparison.OrdinalIgnoreCase) : String.Equals(text,e.Text,StringComparison.OrdinalIgnoreCase)) { e.Index=index; return; }
+                        int columns=e.IncludeSubItemsInSearch ? GameListView.ActionsColumn : GameListView.ExecutableColumn+1;
+                        for(int column=GameListView.ExecutableColumn;column<columns;column++) {
+                            string text=item.ColumnText(column);
+                            if(e.IsPrefixSearch ? text.StartsWith(e.Text,StringComparison.OrdinalIgnoreCase) : String.Equals(text,e.Text,StringComparison.OrdinalIgnoreCase)) {
+                                e.Index=index; return;
+                            }
                         }
                     }
                 };
-                list.Columns.Add("Executable"); list.Columns.Add("Status"); list.Columns.Add("First detected");
+                list.AccessibleDescription="The first header checkbox toggles all games in this tab. Click just to its right to sort by check state. Select a game and press Shift+F10 to open its actions.";
                 list.Toggle=delegate(ListViewItem item) {
                     if(!AllowToggle || EnableRequested==null) return;
                     // A refresh can replace the virtual items during the double-click interval.
-                    int at=rows[section].FindIndex(row=>String.Equals(row.Text,item.Text,StringComparison.OrdinalIgnoreCase));
+                    int at=FindExecutable(section,ExecutableOf(item));
                     if(at<0) return;
-                    item=rows[section][at];
-                    var updated=(ListViewItem)item.Clone();
-                    updated.Checked=!item.Checked;
+                    var row=rows[section][at];
+                    var updated=row.WithEnabled(!row.Enabled);
                     rows[section][at]=updated;
-                    enabledCounts[section]+=updated.Checked ? 1 : -1;
+                    enabledCounts[section]+=updated.Enabled ? 1 : -1;
                     UpdateSectionCaption(section);
-                    list.RedrawItems(at,at,false);
-                    EnableRequested(updated.Text,updated.Checked);
+                    if(list.SortedByEnabled) list.SortRows(true);
+                    else list.RedrawItems(at,at,false);
+                    EnableRequested(new[]{updated.Executable},updated.Enabled);
                 };
-                list.OpenMenu=delegate(ListViewItem item,Point position) {
+                list.ToggleAll=delegate {
+                    if(!AllowToggle || EnableRequested==null || rows[section].Count==0) return;
+                    bool enable=enabledCounts[section]!=rows[section].Count;
+                    var changed=new System.Collections.Generic.List<string>();
+                    for(int at=0;at<rows[section].Count;at++) {
+                        var item=rows[section][at];
+                        if(item.Enabled==enable) continue;
+                        var updated=item.WithEnabled(enable);
+                        rows[section][at]=updated;
+                        changed.Add(updated.Executable);
+                    }
+                    enabledCounts[section]=enable?rows[section].Count:0;
+                    UpdateSectionCaption(section);
+                    if(list.SortedByEnabled) list.SortRows(true);
+                    list.Invalidate();
+                    EnableRequested(changed.ToArray(),enable);
+                };
+                list.SortRows=delegate(bool followSelection) {
+                    string selected=SelectedExecutable;
+                    list.BeginUpdate();
+                    try {
+                        list.SelectedIndices.Clear();
+                        list.SortGames(rows[section]);
+                        RestoreSelection(section,selected,followSelection);
+                    } finally { list.EndUpdate(); }
+                    list.AutomationRowsChanged();
+                    if(!followSelection && list.VirtualListSize>0) list.TopItem=list.Items[0];
+                    UpdateActions();
+                };
+                list.OpenMenu=delegate(ListViewItem item,Point position,bool fromDots) {
                     toggle.Text=item.Checked?"Disable game":"Enable game";
                     toggle.Enabled=AllowToggle;
-                    int n=2;
-                    foreach(var action in new Button[]{EditRuleButton,LaunchButton,ShortcutButton,RemoveButton}) {
-                        itemMenu.Items[n].Text=action.Text; itemMenu.Items[n++].Enabled=action.Enabled;
-                    }
-                    itemMenu.Show(list,position);
+                    if(fromDots) itemMenu.Show(list,position,ToolStripDropDownDirection.BelowLeft);
+                    else itemMenu.Show(list,position);
                 };
                 list.ItemActivate+=delegate { if(EditRuleButton.Enabled) EditRuleButton.PerformClick(); };
                 list.FitColumns();
                 lists[i]=list; page.Controls.Add(list); tabs.TabPages.Add(page);
                 string[] hints={"No games detected yet.\r\nKnown games appear here while auto-enable HDR is on.","No community games to show.\r\nUpdate the community list to check for games.","Your custom list is empty.\r\nChoose Add game or Add running game to get started."};
                 var empty=new Label {Text=hints[i],TextAlign=ContentAlignment.MiddleCenter,Dock=DockStyle.Fill,Tag="muted"};
-                emptyStates[i]=empty; list.Controls.Add(empty);
+                emptyStates[i]=empty; page.Controls.Add(empty);
             }
-            RefreshButton.Text="Refresh"; RefreshButton.SetBounds(24,110,100,38);
-            UseCommunityApps.SetBounds(140,110,220,38);
-            AddRunningButton.Text="Add running game"; AddRunningButton.SetBounds(546,110,170,38);
-            AddGameButton.Text="Add game"; AddGameButton.SetBounds(726,110,130,38);
+            RefreshButton.Text="Refresh"; RefreshButton.SetBounds(24,94,100,38);
+            UseCommunityApps.SetBounds(140,94,220,38);
+            AddRunningButton.Text="Add running game"; AddRunningButton.SetBounds(546,94,170,38);
+            AddGameButton.Text="Add game"; AddGameButton.SetBounds(726,94,130,38);
             ((DialogButton)AddGameButton).Primary=true;
-            EditRuleButton.Text="Game settings"; EditRuleButton.SetBounds(24,492,170,38);
-            LaunchButton.Text="Launch with HDR"; LaunchButton.SetBounds(204,492,170,38);
-            ShortcutButton.Text="Create shortcut"; ShortcutButton.SetBounds(384,492,170,38);
-            RemoveButton.Text="Remove game"; RemoveButton.SetBounds(564,492,150,38);
-            RemoveButton.AccessibleDescription="Remove a local entry or detection. To turn off a community default, uncheck its row.";
+            RemoveButton.ToolTipText="Remove a local entry or detection. To turn off a community default, uncheck its row.";
             if(footer==null) footer=CreateSettingsFooter();
             UpdateCommunityButton.Text="Update community list"; UpdateCommunityButton.SetBounds(24,12,220,38);
             EditCustomButton.Text="Edit custom list"; EditCustomButton.SetBounds(254,12,160,38);
             footer.Controls.AddRange(new Control[]{UpdateCommunityButton,EditCustomButton});
-            foreach(var button in new Button[]{RefreshButton,AddRunningButton,AddGameButton,EditRuleButton,LaunchButton,ShortcutButton,RemoveButton}) {
-                button.Anchor=AnchorStyles.Bottom|AnchorStyles.Left; Controls.Add(button);
-            }
             RefreshButton.Anchor=AnchorStyles.Top|AnchorStyles.Left;
             AddRunningButton.Anchor=AddGameButton.Anchor=AnchorStyles.Top|AnchorStyles.Right;
-            var note=DialogTheme.Caption("Remove game clears local entries. To turn off a community default, uncheck its row.",24,540,832,38);
-            note.Anchor=AnchorStyles.Bottom|AnchorStyles.Left|AnchorStyles.Right;
-            Controls.AddRange(new Control[] {UseCommunityApps,tabs,note});
+            Controls.AddRange(new Control[] {RefreshButton,AddRunningButton,AddGameButton,UseCommunityApps,tabs});
             foreach(var list in lists) list.SelectedIndexChanged+=delegate { UpdateActions(); };
             tabs.SelectedIndexChanged+=delegate { UpdateActions(); };
             DialogTheme.Apply(this);
@@ -964,7 +1442,7 @@ namespace LocalHdrMenu {
             itemMenu.Close();
             for(int i=0;i<lists.Length;i++) {
                 var indices=lists[i].SelectedIndices;
-                savedSelection[i]=indices.Count==1 ? rows[i][indices[0]].Text : null;
+                savedSelection[i]=indices.Count==1 ? rows[i][indices[0]].Executable : null;
                 savedTop[i]=lists[i].IsHandleCreated && rows[i].Count>0 && lists[i].TopItem!=null ? lists[i].TopItem.Index : 0;
                 lists[i].BeginUpdate(); lists[i].SelectedIndices.Clear(); lists[i].VirtualListSize=0; rows[i].Clear();
                 enabledCounts[i]=0;
@@ -973,23 +1451,39 @@ namespace LocalHdrMenu {
         public void AddRow(string section, string executable, string status, string detected,bool enabled=true,bool canRemove=true) {
             int index=Array.IndexOf(sections,section);
             if (index<0) throw new ArgumentException("Unknown game list section.");
-            rows[index].Add(new ListViewItem(new string[] {executable,status,detected}) {Checked=enabled,Tag=canRemove});
+            rows[index].Add(new GameRow(executable,status,detected,enabled,canRemove));
             if(enabled) enabledCounts[index]++;
         }
         void UpdateSectionCaption(int index) {
             tabs.TabPages[index].Text=sections[index]+" ("+enabledCounts[index]+"/"+rows[index].Count+")";
+            var list=lists[index];
+            list.SetHeaderState(DialogTheme.ColumnCheckState(enabledCounts[index],rows[index].Count));
+        }
+        static string ExecutableOf(ListViewItem item) { return item.SubItems[GameListView.ExecutableColumn].Text; }
+        int FindExecutable(int section,string name) {
+            return rows[section].FindIndex(item=>String.Equals(item.Executable,name,StringComparison.OrdinalIgnoreCase));
+        }
+        void RestoreSelection(int section,string selected,bool reveal) {
+            if(String.IsNullOrEmpty(selected)) return;
+            int at=FindExecutable(section,selected);
+            if(at<0) return;
+            var list=lists[section];
+            list.SelectedIndices.Add(at); list.Items[at].Focused=true;
+            if(reveal) list.EnsureVisible(at);
         }
         public void FinishRows() {
             for (int i=0;i<lists.Length;i++) {
+                lists[i].SortGames(rows[i]);
                 lists[i].VirtualListSize=rows[i].Count;
-                lists[i].EndUpdate(); UpdateSectionCaption(i);
+                lists[i].EndUpdate(); lists[i].AutomationRowsChanged(); UpdateSectionCaption(i);
+                bool hasGames=rows[i].Count>0;
+                lists[i].Visible=hasGames;
+                emptyStates[i].Visible=!hasGames;
+                if(hasGames) lists[i].Parent.PerformLayout();
                 lists[i].FitColumns();
-                if(savedSelection[i]!=null) {
-                    int at=rows[i].FindIndex(item=>String.Equals(item.Text,savedSelection[i],StringComparison.OrdinalIgnoreCase));
-                    if(at>=0) {lists[i].SelectedIndices.Add(at); lists[i].Items[at].Focused=true;}
-                }
-                if(savedTop[i]>0 && rows[i].Count>0) lists[i].TopItem=lists[i].Items[Math.Min(savedTop[i],rows[i].Count-1)];
-                emptyStates[i].Visible=rows[i].Count==0;
+                RestoreSelection(i,savedSelection[i],false);
+                if(savedTop[i]>0 && lists[i].VirtualListSize>0 && lists[i].TopItem!=null)
+                    lists[i].TopItem=lists[i].Items[Math.Min(savedTop[i],lists[i].VirtualListSize-1)];
             }
             UpdateActions();
         }
@@ -1378,10 +1872,12 @@ namespace LocalHdrMenu {
         }
         // The shared window has room for two columns. Keep the same controls and
         // validation as the narrow editor and let each column wrap independently.
+        internal TableLayoutPanel SettingsColumns { get; private set; }
         internal void UseSettingsLayout() {
             Body.SuspendLayout();
             Footer.Hide(); CancelButton=null;
             var columns=new TableLayoutPanel {Dock=DockStyle.Top,AutoSize=true,ColumnCount=2,RowCount=1,Padding=new Padding(22,4,22,4)};
+            SettingsColumns=columns;
             var left=levelColumn; var right=SettingsColumn();
             left.Margin=new Padding(0,0,7,0); right.Margin=new Padding(7,0,0,0);
             columns.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,50));
@@ -1735,8 +2231,6 @@ namespace LocalHdrMenu {
         }
     }
     public sealed class TrayPopupMenu : ContextMenuStrip {
-        [DllImport("dwmapi.dll")]
-        static extern int DwmSetWindowAttribute(IntPtr window, int attribute, ref int value, int size);
         [DllImport("user32.dll")]
         static extern bool SetWindowPos(IntPtr window, IntPtr after, int x, int y, int width, int height, uint flags);
         Padding surfacePadding = new Padding(6);
@@ -1749,8 +2243,7 @@ namespace LocalHdrMenu {
             // These popups are repositioned and reparented by WinForms. DWM's
             // transition can briefly animate that intermediate geometry on
             // close. Disable transitions only for our popup windows.
-            int disabled = 1;
-            TransitionsDisabled = DwmSetWindowAttribute(Handle, 3 /* DWMWA_TRANSITIONS_FORCEDISABLED */, ref disabled, sizeof(int)) == 0;
+            TransitionsDisabled = DialogForm.DisableWindowTransitions(Handle);
         }
         protected override Padding DefaultPadding { get { return surfacePadding; } }
         public void SetSurfacePadding(Padding value) { surfacePadding = value; Padding = value; }
@@ -1788,6 +2281,8 @@ namespace LocalHdrMenu {
     }
     public sealed class TrayStatusItem : ToolStripMenuItem {
         public override bool CanSelect { get { return false; } }
+        const string TooltipPrefix = "HDR Control - ";
+        public string TrayIconText { get { return TooltipPrefix + Text; } }
         public string AutomationDecision { get; private set; }
 
         public void SetCombinedStatus(string hdr, string decision) {
@@ -1806,7 +2301,9 @@ namespace LocalHdrMenu {
                 case "Automation waiting: app list or process scan failed": detail = "App list or process scan failed"; break;
             }
             string label = hdr + " \u00b7 Auto: " + detail;
-            Text = label.Length > 85 ? label.Substring(0, 82) + "..." : label;
+            // The same label is used by the .NET Framework NotifyIcon (63 characters maximum).
+            int maxLength = 63 - TooltipPrefix.Length;
+            Text = label.Length > maxLength ? label.Substring(0, maxLength - 3) + "..." : label;
         }
     }
     // Keep native ToolStrip menus for keyboard navigation and tray dismissal.
@@ -1819,6 +2316,7 @@ namespace LocalHdrMenu {
         public TrayMenuRenderer() { RoundedEdges = false; }
         static bool Contrast { get { return SystemInformation.HighContrast; } }
         static int Px(Graphics g, float value) { return Math.Max(1, (int)Math.Round(value * g.DpiX / 96)); }
+        internal static int CornerRadius(Graphics g) { return Px(g, 8); }
         public static GraphicsPath Round(Rectangle r, int radius) {
             var path = new GraphicsPath();
             int d = Math.Min(radius * 2, Math.Min(r.Width, r.Height));
@@ -1911,12 +2409,6 @@ namespace LocalHdrMenu {
                         }
                     } else if (item.Name == "RefreshDisplays") {
                         AddRefreshSymbol(path);
-                    } else if (item.Name == "CheckUpdates") {
-                        AddStroke(path,8,1.5f,8,10.5f);
-                        path.StartFigure();
-                        path.AddLines(new PointF[] {new PointF(4.5f,7),new PointF(8,10.5f),new PointF(11.5f,7)});
-                        path.StartFigure();
-                        path.AddLines(new PointF[] {new PointF(1.5f,11),new PointF(1.5f,14.5f),new PointF(14.5f,14.5f),new PointF(14.5f,11)});
                     } else if (item.Name == "About") {
                         path.AddEllipse(1,1,14,14);
                         AddStroke(path,8,7.5f,8,11.5f);
@@ -2102,7 +2594,7 @@ namespace LocalHdrMenu {
         }
         protected override void OnRenderToolStripBorder(ToolStripRenderEventArgs e) {
             e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
-            using (var path = Round(new Rectangle(0, 0, e.ToolStrip.Width-1, e.ToolStrip.Height-1), Px(e.Graphics, 8)))
+            using (var path = Round(new Rectangle(0, 0, e.ToolStrip.Width-1, e.ToolStrip.Height-1), CornerRadius(e.Graphics)))
             using (var pen = new Pen(Contrast ? SystemColors.WindowText : Border)) {
                 e.Graphics.DrawPath(pen, path);
             }
@@ -2110,6 +2602,20 @@ namespace LocalHdrMenu {
     }
 
     public static class TrayMenuTheme {
+        internal static void ApplyCorners(ToolStripDropDown menu) {
+            EventHandler update = delegate {
+                if (menu.Width <= 0 || menu.Height <= 0) return;
+                using (var g = menu.CreateGraphics())
+                using (var path = TrayMenuRenderer.Round(menu.ClientRectangle, TrayMenuRenderer.CornerRadius(g))) {
+                    var old = menu.Region;
+                    menu.Region = SystemInformation.HighContrast ? null : new Region(path);
+                    if (old != null) old.Dispose();
+                }
+            };
+            menu.SizeChanged += update;
+            menu.Opening += delegate { update(menu,EventArgs.Empty); };
+            update(menu,EventArgs.Empty);
+        }
         public static void Apply(ToolStripDropDown menu, Font font) {
             float scale;
             using (var g = menu.CreateGraphics()) { scale = g.DpiX / 96f; }
@@ -2157,14 +2663,206 @@ namespace LocalHdrMenu {
                     menu.Size = new Size(width, totalHeight);
                 } finally { layingOut = false; }
             };
-            menu.SizeChanged += delegate {
-                Region old = menu.Region;
-                using (var path = TrayMenuRenderer.Round(new Rectangle(0, 0, menu.Width, menu.Height), (int)Math.Round(8*scale))) {
-                    menu.Region = SystemInformation.HighContrast ? null : new Region(path);
-                }
-                if (old != null) old.Dispose();
-            };
+            ApplyCorners(menu);
             menu.PerformLayout();
+        }
+    }
+}
+
+namespace LocalHdrMenu {
+    using System;
+    using System.Windows;
+    using System.Windows.Automation;
+    using System.Windows.Automation.Provider;
+    using System.Windows.Forms;
+    using GameList = GameListsForm.GameListView;
+
+    // Enumerate only visible rows. A client that needs an offscreen game can
+    // find it by name or selection and realize it without walking every cell.
+    internal sealed class GameListAutomation : IRawElementProviderFragmentRoot, IItemContainerProvider, IScrollProvider, ISelectionProvider {
+        readonly GameList list;
+        readonly IntPtr handle;
+        internal GameListAutomation(GameList list) { this.list=list; handle=list.Handle; }
+        T Read<T>(Func<T> read) {
+            if(list.IsDisposed || !list.IsHandleCreated) throw new ElementNotAvailableException();
+            if(list.InvokeRequired) return (T)list.Invoke(new Func<T>(()=>Read(read)));
+            if(list.Handle!=handle) throw new ElementNotAvailableException();
+            return read();
+        }
+        void Change(Action change) {
+            Read(delegate {
+                if(!list.Visible) throw new ElementNotAvailableException();
+                if(!list.Enabled) throw new ElementNotEnabledException();
+                change(); return true;
+            });
+        }
+        int Count { get { return list.VirtualListSize; } }
+        int Top { get { return Count==0 ? 0 : (list.TopItem==null ? 0 : list.TopItem.Index); } }
+        int Page { get { return Math.Max(1,list.RowsPerViewport); } }
+        int Last { get { return Math.Min(Count-1,Top+Page-1); } }
+        int lastTop=-1,lastCount=-1,lastPage=-1;
+        internal void ViewChanged(bool refresh) {
+            if(!list.IsHandleCreated || !list.Visible || !AutomationInteropProvider.ClientsAreListening) return;
+            int top=Top,count=Count,page=Page;
+            if(!refresh && lastTop==top && lastCount==count && lastPage==page) return;
+            lastTop=top; lastCount=count; lastPage=page;
+            AutomationInteropProvider.RaiseStructureChangedEvent(this,new StructureChangedEventArgs(StructureChangeType.ChildrenInvalidated,new int[0]));
+        }
+        internal void SelectionChanged() {
+            if(!list.IsHandleCreated || !AutomationInteropProvider.ClientsAreListening || list.SelectedIndices.Count!=1) return;
+            var entry=At(list.SelectedIndices[0]);
+            if(entry!=null) AutomationInteropProvider.RaiseAutomationEvent(SelectionItemPatternIdentifiers.ElementSelectedEvent,entry,new AutomationEventArgs(SelectionItemPatternIdentifiers.ElementSelectedEvent));
+        }
+        Entry At(int index) { return index<0 || index>=Count ? null : new Entry(this,index,list.Games[index].Executable); }
+        public ProviderOptions ProviderOptions { get { return ProviderOptions.ServerSideProvider; } }
+        public IRawElementProviderSimple HostRawElementProvider { get { return Read(()=>AutomationInteropProvider.HostProviderFromHandle(list.Handle)); } }
+        public object GetPatternProvider(int id) {
+            return id==ScrollPatternIdentifiers.Pattern.Id || id==SelectionPatternIdentifiers.Pattern.Id || id==ItemContainerPatternIdentifiers.Pattern.Id ? this : null;
+        }
+        public object GetPropertyValue(int id) {
+            if(id==AutomationElementIdentifiers.ControlTypeProperty.Id) return ControlType.List.Id;
+            if(id==AutomationElementIdentifiers.NameProperty.Id) return list.AccessibleName;
+            if(id==AutomationElementIdentifiers.HelpTextProperty.Id) return list.AccessibleDescription;
+            return null;
+        }
+        public IRawElementProviderFragmentRoot FragmentRoot { get { return this; } }
+        public Rect BoundingRectangle { get { return Read(()=>Bounds(list.RectangleToScreen(list.ClientRectangle))); } }
+        static Rect Bounds(System.Drawing.Rectangle rectangle) {
+            return rectangle.IsEmpty ? Rect.Empty : new Rect(rectangle.X,rectangle.Y,rectangle.Width,rectangle.Height);
+        }
+        public IRawElementProviderSimple[] GetEmbeddedFragmentRoots() { return null; }
+        public int[] GetRuntimeId() { return null; }
+        public IRawElementProviderFragment Navigate(NavigateDirection direction) {
+            return Read(()=>direction==NavigateDirection.FirstChild ? At(Top) : direction==NavigateDirection.LastChild ? At(Last) : null);
+        }
+        public void SetFocus() { Change(()=>list.Focus()); }
+        public IRawElementProviderFragment ElementProviderFromPoint(double x,double y) {
+            return Read<IRawElementProviderFragment>(delegate {
+                var point=list.PointToClient(new System.Drawing.Point((int)x,(int)y));
+                var item=list.GetItemAt(point.X,point.Y);
+                return item==null ? (IRawElementProviderFragment)this : At(item.Index);
+            });
+        }
+        public IRawElementProviderFragment GetFocus() {
+            return Read<IRawElementProviderFragment>(()=>!list.Focused ? null : list.FocusedItem==null ? (IRawElementProviderFragment)this : At(list.FocusedItem.Index));
+        }
+        public IRawElementProviderSimple FindItemByProperty(IRawElementProviderSimple startAfter,int propertyId,object value) {
+            return Read(delegate {
+                var previous=startAfter as Entry;
+                if(startAfter!=null && (previous==null || previous.Owner!=this)) throw new ArgumentException("Unknown starting game.");
+                int start=previous==null ? 0 : previous.Index+1;
+                for(int i=start;i<Count;i++) {
+                    if(propertyId==0) return At(i);
+                    object actual;
+                    if(propertyId==AutomationElementIdentifiers.NameProperty.Id || propertyId==AutomationElementIdentifiers.AutomationIdProperty.Id) actual=list.Games[i].Executable;
+                    else if(propertyId==SelectionItemPatternIdentifiers.IsSelectedProperty.Id) actual=list.SelectedIndices.Contains(i);
+                    else if(propertyId==AutomationElementIdentifiers.ControlTypeProperty.Id) actual=ControlType.ListItem.Id;
+                    else throw new ArgumentException("Unsupported game property.");
+                    if(Equals(actual,value)) return At(i);
+                }
+                return null;
+            });
+        }
+        public bool CanSelectMultiple { get { return false; } }
+        public bool IsSelectionRequired { get { return false; } }
+        public IRawElementProviderSimple[] GetSelection() { return Read(()=>list.SelectedIndices.Count==0 ? new IRawElementProviderSimple[0] : new IRawElementProviderSimple[]{At(list.SelectedIndices[0])}); }
+        public bool HorizontallyScrollable { get { return false; } }
+        public double HorizontalScrollPercent { get { return ScrollPatternIdentifiers.NoScroll; } }
+        public double HorizontalViewSize { get { return 100; } }
+        public bool VerticallyScrollable { get { return Read(()=>Count>Page); } }
+        public double VerticalScrollPercent { get { return Read(()=>Count<=Page ? ScrollPatternIdentifiers.NoScroll : Math.Min(100,100.0*Top/(Count-Page))); } }
+        public double VerticalViewSize { get { return Read(()=>Count==0 ? 100 : Math.Min(100,100.0*Page/Count)); } }
+        void GoTo(int top) { if(Count>0) list.TopItem=list.Items[Math.Max(0,Math.Min(top,Count-Page))]; }
+        public void Scroll(ScrollAmount horizontalAmount,ScrollAmount verticalAmount) {
+            if(horizontalAmount!=ScrollAmount.NoAmount) throw new InvalidOperationException();
+            Change(delegate {
+                switch(verticalAmount) {
+                    case ScrollAmount.LargeIncrement: GoTo(Top+Page); break;
+                    case ScrollAmount.SmallIncrement: GoTo(Top+1); break;
+                    case ScrollAmount.LargeDecrement: GoTo(Top-Page); break;
+                    case ScrollAmount.SmallDecrement: GoTo(Top-1); break;
+                }
+            });
+        }
+        public void SetScrollPercent(double horizontalPercent,double verticalPercent) {
+            if(horizontalPercent!=ScrollPatternIdentifiers.NoScroll) throw new InvalidOperationException();
+            if(verticalPercent==ScrollPatternIdentifiers.NoScroll) return;
+            if(!(verticalPercent>=0 && verticalPercent<=100)) throw new ArgumentOutOfRangeException("verticalPercent");
+            Change(()=>GoTo((int)Math.Round((Count-Page)*verticalPercent/100)));
+        }
+
+        sealed class Entry : IRawElementProviderFragment, ISelectionItemProvider, IToggleProvider, IInvokeProvider, IScrollItemProvider, IVirtualizedItemProvider {
+            internal readonly GameListAutomation Owner;
+            readonly string executable;
+            int index;
+            GameList List { get { return Owner.list; } }
+            internal Entry(GameListAutomation owner,int index,string executable) { Owner=owner; this.index=index; this.executable=executable; }
+            internal int Index { get {
+                if(index<Owner.Count && index>=0 && List.Games[index].Executable==executable) return index;
+                index=List.Games.FindIndex(game=>game.Executable==executable);
+                if(index<0 || index>=Owner.Count) throw new ElementNotAvailableException();
+                return index;
+            } }
+            public ProviderOptions ProviderOptions { get { return ProviderOptions.ServerSideProvider; } }
+            public IRawElementProviderSimple HostRawElementProvider { get { return null; } }
+            public object GetPatternProvider(int id) {
+                return id==SelectionItemPatternIdentifiers.Pattern.Id || id==TogglePatternIdentifiers.Pattern.Id || id==InvokePatternIdentifiers.Pattern.Id ||
+                    id==ScrollItemPatternIdentifiers.Pattern.Id || id==VirtualizedItemPatternIdentifiers.Pattern.Id ? this : null;
+            }
+            public object GetPropertyValue(int id) {
+                if(id==AutomationElementIdentifiers.ControlTypeProperty.Id) return ControlType.ListItem.Id;
+                if(id==AutomationElementIdentifiers.NameProperty.Id || id==AutomationElementIdentifiers.AutomationIdProperty.Id) return executable;
+                if(id==AutomationElementIdentifiers.IsKeyboardFocusableProperty.Id || id==AutomationElementIdentifiers.IsControlElementProperty.Id || id==AutomationElementIdentifiers.IsContentElementProperty.Id) return true;
+                if(id==AutomationElementIdentifiers.IsEnabledProperty.Id) return Owner.Read(()=>List.Enabled);
+                if(id==AutomationElementIdentifiers.HasKeyboardFocusProperty.Id) return Owner.Read(()=>List.Focused && List.FocusedItem!=null && List.FocusedItem.Index==Index);
+                if(id==AutomationElementIdentifiers.IsOffscreenProperty.Id) return BoundingRectangle.IsEmpty;
+                if(id==AutomationElementIdentifiers.ItemStatusProperty.Id) return Owner.Read(()=>List.Games[Index].Status);
+                if(id==AutomationElementIdentifiers.HelpTextProperty.Id) return Owner.Read(()=>List.Games[Index].Detected);
+                return null;
+            }
+            public IRawElementProviderFragmentRoot FragmentRoot { get { return Owner; } }
+            public Rect BoundingRectangle { get { return Owner.Read(delegate {
+                int at=Index;
+                if(!List.Visible || at<Owner.Top || at>Owner.Last) return Rect.Empty;
+                return Bounds(List.RectangleToScreen(List.GetItemRect(at)));
+            }); } }
+            public int[] GetRuntimeId() {
+                // The executable identifies the same row after sorting or refreshing.
+                var id=new int[executable.Length+1]; id[0]=AutomationInteropProvider.AppendRuntimeId;
+                for(int i=0;i<executable.Length;i++) id[i+1]=executable[i];
+                return id;
+            }
+            public IRawElementProviderSimple[] GetEmbeddedFragmentRoots() { return null; }
+            public IRawElementProviderFragment Navigate(NavigateDirection direction) {
+                if(direction==NavigateDirection.Parent) return Owner;
+                return Owner.Read(delegate {
+                    int at=Index;
+                    if(direction==NavigateDirection.NextSibling && at>=Owner.Top && at<Owner.Last) return Owner.At(at+1);
+                    if(direction==NavigateDirection.PreviousSibling && at>Owner.Top && at<=Owner.Last) return Owner.At(at-1);
+                    return null;
+                });
+            }
+            public bool IsSelected { get { return Owner.Read(()=>List.SelectedIndices.Contains(Index)); } }
+            public IRawElementProviderSimple SelectionContainer { get { return Owner; } }
+            public void Select() { Owner.Change(delegate { var item=List.Items[Index]; item.Selected=item.Focused=true; }); }
+            public void AddToSelection() {
+                Owner.Change(delegate { if(List.SelectedIndices.Count!=0 && !IsSelected) throw new InvalidOperationException(); Select(); });
+            }
+            public void RemoveFromSelection() { Owner.Change(()=>List.Items[Index].Selected=false); }
+            public ToggleState ToggleState { get { return Owner.Read(()=>List.Games[Index].Enabled ? ToggleState.On : ToggleState.Off); } }
+            public void Toggle() {
+                Owner.Change(delegate {
+                    var before=ToggleState;
+                    Select(); List.Toggle(List.Items[Index]);
+                    var after=ToggleState;
+                    if(before!=after && AutomationInteropProvider.ClientsAreListening)
+                        AutomationInteropProvider.RaiseAutomationPropertyChangedEvent(this,new AutomationPropertyChangedEventArgs(TogglePatternIdentifiers.ToggleStateProperty,before,after));
+                });
+            }
+            public void Invoke() { Owner.Change(delegate { Select(); List.ActivateGame(); }); }
+            public void Realize() { Owner.Change(()=>List.EnsureVisible(Index)); }
+            public void ScrollIntoView() { Realize(); }
+            public void SetFocus() { Owner.Change(delegate { Realize(); Select(); List.Focus(); }); }
         }
     }
 }
