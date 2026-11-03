@@ -3,6 +3,30 @@ $hdrStartupLink = Join-Path ([Environment]::GetFolderPath('Startup')) 'HDR Contr
 $hdrStartupTarget = Join-Path $env:ProgramData 'HdrSdrMenu\HDR Control.exe'
 $hdrStartupArguments = '--startup'
 $hdrStartupApproval = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\StartupApproved\StartupFolder'
+$hdrProtocolPath = 'HKCU:\Software\Classes\notuxius-hdr-control'
+
+function Register-HdrNotificationProtocol([switch]$RefreshShell) {
+    $owner = 'HdrSdrMenu.LocalScript.v1'
+    $command = '"{0}" //NoLogo "{1}" Notification "%1"' -f (Join-Path $env:SystemRoot 'System32\wscript.exe'),(Join-Path $env:ProgramData 'HdrSdrMenu\Toggle-HdrSdr.vbs')
+    $key = Get-Item -LiteralPath $hdrProtocolPath -ErrorAction SilentlyContinue
+    if ($key -and $key.GetValue('Owner') -ne $owner) { throw 'The notification protocol is registered by another app.' }
+    $commandPath = Join-Path $hdrProtocolPath 'shell\open\command'
+    $open = Get-Item -LiteralPath $commandPath -ErrorAction SilentlyContinue
+    if (-not $key -or $null -eq $key.GetValue('URL Protocol') -or -not $open -or $open.GetValue('') -ne $command) {
+        New-Item -Path $commandPath -Force | Out-Null
+        Set-Item -LiteralPath $hdrProtocolPath -Value 'URL:HDR Control'
+        New-ItemProperty -LiteralPath $hdrProtocolPath -Name Owner -Value $owner -Force | Out-Null
+        Set-Item -LiteralPath $commandPath -Value $command
+        New-ItemProperty -LiteralPath $hdrProtocolPath -Name 'URL Protocol' -Value '' -PropertyType String -Force | Out-Null
+        $RefreshShell = $true
+    }
+    if ($RefreshShell) {
+        if (-not ('LocalHdrMenu.ShellAssociations' -as [type])) {
+            Add-Type -Namespace LocalHdrMenu -Name ShellAssociations -MemberDefinition '[System.Runtime.InteropServices.DllImport("shell32.dll")] public static extern void SHChangeNotify(int change, uint flags, System.IntPtr item1, System.IntPtr item2);'
+        }
+        [LocalHdrMenu.ShellAssociations]::SHChangeNotify(0x08000000,0,[IntPtr]::Zero,[IntPtr]::Zero)
+    }
+}
 
 function Test-HdrStartupShortcut([switch]$Legacy) {
     if (-not (Test-Path -LiteralPath $hdrStartupLink -PathType Leaf)) { return $false }
