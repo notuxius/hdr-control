@@ -44,6 +44,7 @@ function Display([string]$Name, [bool]$Supported, [bool]$Enabled) {
 $script:syncCount=0
 Initialize-HdrTray
 $script:hdrUpdateSettingsKey='HKEY_CURRENT_USER\Software\HdrControlTrayTest-'+[Guid]::NewGuid().ToString('N')
+$hdrProtocolPath='Registry::'+$script:hdrUpdateSettingsKey+'\Protocol'
 try {
     Assert ($null -ne $script:hdrTray.ShowMenuMethod) 'Native tray popup method unavailable'
     Assert ($null -eq $script:hdrTray.Icon.ContextMenuStrip) 'Automatic right-click opening must stay disabled'
@@ -116,6 +117,9 @@ try {
     Assert ($script:offeredVersion -eq '1.1.0') 'Notification click after a tray restart must use the same installer as About'
     & $script:sendRealNotification 'Test current version' -OpenAbout
     Assert ($script:toastXml.toast.launch -ceq 'notuxius-hdr-control:about') 'Current-version notification should still open About'
+    Set-ItemProperty -LiteralPath $hdrProtocolPath -Name Owner -Value 'Other'
+    & $script:sendRealNotification "Test update available`nClick to install the update." -InstallVersion '1.1.0'
+    Assert (-not $script:toastXml.DocumentElement.HasAttribute('launch') -and $script:toastXml.SelectSingleNode('//text[last()]').InnerText -eq 'Open About and select Install update.') 'Unavailable protocol must fall back to About instructions'
     Assert ($null -eq $script:requestedUri) 'Updating must not open a browser'
     $script:messageResponse = [Windows.Forms.DialogResult]::No
     Assert ($script:hdrTray.Menu.ShowActionIcons) 'Right-click menu icons are missing'
@@ -470,6 +474,6 @@ try {
     } finally { $script:hdrTray.UpdateProcess=$null }
     'PASS: click routing, native popup placement and screen edges, toggle concurrency, menu contents, state updates, recovery, and settings links.'
 } finally {
-    Remove-Item -LiteralPath ('Registry::'+$script:hdrUpdateSettingsKey) -ErrorAction SilentlyContinue
+    Remove-Item -LiteralPath ('Registry::'+$script:hdrUpdateSettingsKey) -Recurse -ErrorAction SilentlyContinue
     Close-HdrTray
 }

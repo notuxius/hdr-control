@@ -13,12 +13,26 @@ try {
         . ([scriptblock]::Create($definition.Extent.Text.Replace('HKCU:\Software\HdrContextMenu',$key)))
     }
     . (Join-Path $repo 'HdrStartup.ps1')
+    $hdrProtocolPath = Join-Path $key 'Protocol'
+    New-Item -Path $key | Out-Null
+    Register-HdrNotificationProtocol
+    $openPath = Join-Path $hdrProtocolPath 'shell\open\command'
+    $command = (Get-Item -LiteralPath $openPath).GetValue('')
+    if ($command -notlike '*Toggle-HdrSdr.vbs" Notification "%1"') { throw 'Notification handler is missing' }
+    Set-Item -LiteralPath $openPath -Value 'stale command'
+    Remove-ItemProperty -LiteralPath $hdrProtocolPath -Name 'URL Protocol'
+    Register-HdrNotificationProtocol
+    if ((Get-Item -LiteralPath $openPath).GetValue('') -ne $command -or $null -eq (Get-Item -LiteralPath $hdrProtocolPath).GetValue('URL Protocol')) { throw 'Notification protocol repair failed' }
+    Set-ItemProperty -LiteralPath $hdrProtocolPath -Name Owner -Value 'Other'
+    $rejected=$false
+    try { Register-HdrNotificationProtocol } catch { $rejected=$true }
+    if (-not $rejected) { throw 'Unrelated protocol registration was accepted' }
+    Remove-Item -LiteralPath $hdrProtocolPath -Recurse
     $hdrStartupLink=Join-Path $temp 'HDR Control.lnk'
     $hdrStartupApproval=$key
     if (Get-HdrStartupEnabled) { throw 'A missing startup shortcut must be off' }
     Set-HdrStartupEnabled $true
     if (-not (Get-HdrStartupEnabled)) { throw 'Startup registration failed' }
-    New-Item -Path $key | Out-Null
     New-ItemProperty -LiteralPath $key -Name 'HDR Control.lnk' -PropertyType Binary -Value ([byte[]](3,0,0,0)) | Out-Null
     if (Get-HdrStartupEnabled) { throw 'Windows startup disable must be respected' }
     Remove-ItemProperty -LiteralPath $key -Name 'HDR Control.lnk'

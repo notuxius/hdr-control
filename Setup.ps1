@@ -26,7 +26,6 @@ $taskName = 'HdrSdrMenu-Label-' + $env:USERNAME
 $menuKey = 'HKCU:\Software\Classes\DesktopBackground\Shell\HdrToggle.LocalScript'
 $owner = 'HdrSdrMenu.LocalScript.v1'
 $aboutProtocol = 'HKCU:\Software\Classes\notuxius-hdr-control'
-$aboutCommand = '"{0}" //NoLogo "{1}" Notification "%1"' -f $shortcutTarget,$launcher
 $config = Join-Path $NilesoftPath 'shell.nss'
 $importFile = Join-Path $NilesoftPath 'imports\hdr-context-menu.nss'
 $importLine = "import 'imports/hdr-context-menu.nss'"
@@ -166,11 +165,6 @@ try {
         Remove-Item -LiteralPath (Join-Path $installDir 'package.commit') -ErrorAction SilentlyContinue
     }
     New-Item -Path ($menuKey+'\command') -Force | Out-Null
-    New-Item -Path ($aboutProtocol+'\shell\open\command') -Force | Out-Null
-    Set-Item -LiteralPath $aboutProtocol -Value 'URL:HDR Control'
-    Set-Item -LiteralPath ($aboutProtocol+'\shell\open\command') -Value $aboutCommand
-    New-ItemProperty -LiteralPath $aboutProtocol -Name Owner -Value $owner -Force | Out-Null
-    New-ItemProperty -LiteralPath $aboutProtocol -Name 'URL Protocol' -Value '' -PropertyType String -Force | Out-Null
     New-ItemProperty -LiteralPath $menuKey -Name Owner -Value $owner -PropertyType String -Force | Out-Null
     New-ItemProperty -LiteralPath $menuKey -Name Icon -Value (Join-Path $installDir 'HdrSdrMenu.ico') -PropertyType String -Force | Out-Null
     & $runtime -Action Sync
@@ -204,6 +198,7 @@ try {
     $principal = New-ScheduledTaskPrincipal -UserId $identity.User.Value -LogonType Interactive -RunLevel Limited
     $settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -ExecutionTimeLimit ([TimeSpan]::Zero) -MultipleInstances IgnoreNew
     . (Join-Path $installDir 'HdrStartup.ps1')
+    Register-HdrNotificationProtocol -RefreshShell
     $startupPrefs=Get-ItemProperty -LiteralPath 'HKCU:\Software\HdrContextMenu' -ErrorAction SilentlyContinue
     if (-not $startupPrefs.StartupMigrated) {
         Set-HdrStartupEnabled ($null -eq $startupPrefs.StartWithWindows -or $startupPrefs.StartWithWindows -ne 0)

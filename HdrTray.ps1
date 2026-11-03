@@ -33,6 +33,14 @@ function Show-HdrNotification([string]$Message, [switch]$OpenAbout, [string]$Ins
         $xml = [Windows.Data.Xml.Dom.XmlDocument, Windows.Data.Xml.Dom.XmlDocument, ContentType=WindowsRuntime]::new()
         $xml.LoadXml('<toast><visual><binding template="ToastGeneric"/></visual></toast>')
         if ($OpenAbout -or $InstallVersion) {
+            try { Register-HdrNotificationProtocol } catch {
+                Write-HdrDiagnostic 'NOTIFICATION' $_.Exception.Message
+                if ($InstallVersion) { $Message = ($Message -split "\r?\n",2)[0] + "`nOpen About and select Install update." }
+                $OpenAbout = $false
+                $InstallVersion = ''
+            }
+        }
+        if ($OpenAbout -or $InstallVersion) {
             $launch = 'notuxius-hdr-control:about'
             if ($InstallVersion) {
                 # Only a link issued for this user's offered release can start the updater.
@@ -1511,6 +1519,7 @@ function Close-HdrTray {
 }
 
 function Start-HdrTray {
+    try { Register-HdrNotificationProtocol -RefreshShell } catch { Write-HdrDiagnostic 'NOTIFICATION' $_.Exception.Message }
     Initialize-HdrTray
     Write-HdrDiagnostic 'STARTUP' ('HDR Control '+(Get-HdrInstalledVersion)+'; profiles and event refresh ready')
     try {

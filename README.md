@@ -1,6 +1,6 @@
 # HDR Control
 
-Current version: **1.4.0**.
+Current version: **1.4.1**.
 
 Control HDR, automate switching, and adjust SDR brightness on Windows. Formerly **HDR Context Menu**.
 
