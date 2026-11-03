@@ -225,7 +225,10 @@ namespace LocalHdrMenu {
                 catch(DllNotFoundException) { } catch(EntryPointNotFoundException) { }
             };
             var button=control as Button;
-            if(button!=null) { button.FlatStyle=FlatStyle.Flat; button.FlatAppearance.BorderSize=0; button.BackColor=Surface; button.Cursor=Cursors.Hand; }
+            if(button!=null) {
+                button.FlatStyle=FlatStyle.Flat; button.FlatAppearance.BorderSize=0; button.BackColor=Surface;
+                if(button.AccessibleRole!=AccessibleRole.PageTab) button.Cursor=Cursors.Hand;
+            }
             if(control is TextBox || control is ComboBox || control is NumericUpDown || control is CheckedListBox) control.BackColor=Surface;
             var text=control as TextBox; if(text!=null) text.BorderStyle=BorderStyle.FixedSingle;
             var combo=control as ComboBox; if(combo!=null && !(combo is DialogComboBox)) {
@@ -758,7 +761,10 @@ namespace LocalHdrMenu {
             if(SystemInformation.HighContrast) { base.OnPaint(e); return; }
             e.Graphics.Clear(Parent==null?DialogTheme.Background:Parent.BackColor); e.Graphics.SmoothingMode=SmoothingMode.AntiAlias;
             Color fill=Primary?DialogTheme.Accent:DialogTheme.Surface;
-            if(!Enabled) fill=DialogTheme.Surface; else if(pressed) fill=ControlPaint.Dark(fill,.12f); else if(hovering) fill=ControlPaint.Light(fill,.12f);
+            if(!Enabled) fill=DialogTheme.Surface;
+            else if(!Primary || AccessibleRole!=AccessibleRole.PageTab) {
+                if(pressed) fill=ControlPaint.Dark(fill,.12f); else if(hovering) fill=ControlPaint.Light(fill,.12f);
+            }
             using(var path=DialogTheme.Round(new RectangleF(1,1,Width-3,Height-3),7*Font.Size/10))
             using(var brush=new SolidBrush(fill)) using(var pen=new Pen(Focused?DialogTheme.Accent:DialogTheme.Border)) {
                 e.Graphics.FillPath(brush,path); if(!Primary || Focused) e.Graphics.DrawPath(pen,path);
@@ -833,7 +839,20 @@ namespace LocalHdrMenu {
             public void AddRange(Panel[] pages) { foreach(var page in pages) Add(page); }
         }
         public readonly Pages TabPages;
-        readonly System.Collections.Generic.List<DialogButton> buttons=new System.Collections.Generic.List<DialogButton>();
+        sealed class TabButton : DialogButton {
+            internal void SetSelected(bool selected) {
+                Primary=selected;
+                Cursor=selected?Cursors.Default:Cursors.Hand;
+                Invalidate();
+            }
+            protected override void WndProc(ref Message m) {
+                // Let the strip receive mouse input over the current tab while keeping keyboard focus.
+                if(Primary && m.Msg==0x0084) { m.Result=new IntPtr(-1); return; } // WM_NCHITTEST, HTTRANSPARENT
+                base.WndProc(ref m);
+            }
+            protected override void OnClick(EventArgs e) { if(!Primary) base.OnClick(e); }
+        }
+        readonly System.Collections.Generic.List<TabButton> buttons=new System.Collections.Generic.List<TabButton>();
         int selected=-1;
         public event EventHandler SelectedIndexChanged;
         readonly bool redrawStrip;
@@ -869,8 +888,8 @@ namespace LocalHdrMenu {
                             selected=value;
                             TabPages[value].Visible=true;
                             TabPages[value].BringToFront();
-                            if(previous>=0) { TabPages[previous].Visible=false; buttons[previous].Primary=false; buttons[previous].Invalidate(); }
-                            buttons[value].Primary=true; buttons[value].Invalidate();
+                            if(previous>=0) { TabPages[previous].Visible=false; buttons[previous].SetSelected(false); }
+                            buttons[value].SetSelected(true);
                         } finally { ResumeLayout(true); }
                         if(SelectedIndexChanged!=null) SelectedIndexChanged(this,EventArgs.Empty);
                         if(paintStrip && IsHandleCreated && Visible)
@@ -885,7 +904,8 @@ namespace LocalHdrMenu {
         }
         void AddPage(Panel page) {
             int index=buttons.Count;
-            var button=new DialogButton {Text=page.Text,AccessibleRole=AccessibleRole.PageTab,TabIndex=index};
+            var button=new TabButton {Text=page.Text,AccessibleRole=AccessibleRole.PageTab,TabIndex=index};
+            button.SetSelected(false);
             button.Click+=delegate { SelectedIndex=index; };
             page.TextChanged+=delegate { button.Text=page.Text; };
             buttons.Add(button); Controls.Add(button); page.Visible=false; Controls.Add(page);

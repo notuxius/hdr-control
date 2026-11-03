@@ -54,8 +54,19 @@ foreach ($scale in @(1.0,1.25,1.5,2.0)) {
             $form.Show(); [Windows.Forms.Application]::DoEvents(); $form.PerformLayout()
             Check-Controls $form ($name+' at '+$scale)
             foreach($tabs in @($form.Controls | Where-Object { $_ -is [LocalHdrMenu.DialogTabs] })) {
+                $headers=@($tabs.Controls | Where-Object AccessibleRole -eq PageTab | Sort-Object TabIndex)
                 for($page=0;$page -lt $tabs.TabPages.Count;$page++) {
-                    $tabs.SelectedIndex=$page
+                    if($page -gt 0) {
+                        Assert ($headers[$page].Cursor -eq [Windows.Forms.Cursors]::Hand) 'Inactive tab must show the hand cursor'
+                        $headers[$page].PerformClick()
+                        Assert ($headers[$page-1].Cursor -eq [Windows.Forms.Cursors]::Hand) 'Previous tab must become clickable again'
+                    }
+                    Assert ($tabs.SelectedIndex -eq $page) 'Click must select an inactive tab'
+                    Assert ($headers[$page].Cursor -eq [Windows.Forms.Cursors]::Default) 'Selected tab must show the default cursor'
+                    $script:tabClicked=$false
+                    $headers[$page].add_Click({ $script:tabClicked=$true })
+                    $headers[$page].PerformClick()
+                    Assert (!$script:tabClicked) 'Selected tab must ignore clicks'
                     [Windows.Forms.Application]::DoEvents(); $form.PerformLayout()
                     Check-Controls $form ($name+' page '+$page+' at '+$scale)
                     Assert (@($tabs.TabPages | Where-Object Visible).Count -eq 1) 'Navigation must show exactly one page'
