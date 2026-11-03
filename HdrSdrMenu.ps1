@@ -9,6 +9,7 @@ param(
     [ValidatePattern('^[a-f0-9]{32}$')][string]$LaunchId,
     [switch]$FromHelper,
     [switch]$OpenAbout,
+    [switch]$UpdateComplete,
     [ValidatePattern('^[a-f0-9]{32}$')][string]$InstallOffer,
     [switch]$ShowError
 )
@@ -306,9 +307,10 @@ namespace LocalHdrMenu {
                     @{Kind='InstallUpdate';Id=$InstallOffer;CreatedUtc=[DateTime]::UtcNow.ToString('o')} | ConvertTo-Json -Compress
                 )
             }
-            if (-not $ownsMutex) { return }
+            if (-not $ownsMutex -and -not $UpdateComplete) { return }
             . (Join-Path $installDir 'HdrTray.ps1')
-            Start-HdrTray
+            if ($UpdateComplete) { Show-HdrNotification ("Update complete`nHDR Control "+(Get-HdrInstalledVersion)+" is installed.") }
+            if ($ownsMutex) { Start-HdrTray }
         } finally {
             $aboutRequest.Dispose()
             if ($ownsMutex) { $watchMutex.ReleaseMutex() }

@@ -131,6 +131,12 @@ try {
     }
     . (Join-Path $PSScriptRoot 'Update-HdrApp.ps1') -FunctionsOnly
     Restore-HdrCommunityBundle $PSScriptRoot
+    $installedVersionPath = Join-Path $installDir 'VERSION'
+    $previousVersion = $null
+    if ([IO.File]::Exists($installedVersionPath)) {
+        [void][version]::TryParse([IO.File]::ReadAllText($installedVersionPath).Trim(),[ref]$previousVersion)
+    }
+    $packageVersion = ConvertTo-HdrVersion ([IO.File]::ReadAllText((Join-Path $PSScriptRoot 'VERSION')).Trim())
     foreach ($name in @('HdrSdrMenu.ps1','HdrTray.ps1','HdrProfiles.ps1','HdrStartup.ps1','ProfilesUi.cs','ProcessGridTheme.cs','TrayTheme.cs','HdrLocation.cs','Update-HdrApp.ps1','HdrApps.community.txt','VERSION','Start-Tray.vbs','Toggle-HdrSdr.vbs','HdrSdrMenu.ico','HdrEnabled.ico','HdrAutoEnabled.ico','HdrEnabledPaused.ico','HdrAutoIdle.ico','HdrDisabled.ico','HdrUnavailable.ico','HdrEnableAction.ico','HdrDisableAction.ico','HdrUnavailableAction.ico','hdr-context-menu.nss')) {
         if (-not (Test-Path -LiteralPath (Join-Path $PSScriptRoot $name))) { throw "Package file missing: $name" }
     }
@@ -226,8 +232,11 @@ try {
     # starts the limited-user tray even when the saved logon preference is off.
     $scheduler = New-Object -ComObject Schedule.Service
     $scheduler.Connect()
-    [void]$scheduler.GetFolder('\').GetTask($taskName).Run('LaunchNow')
     Refresh-Shell
+    $installedVersion = ConvertTo-HdrVersion ([IO.File]::ReadAllText($installedVersionPath).Trim())
+    if ($installedVersion -ne $packageVersion) { throw 'Installed version verification failed.' }
+    $launchReason = if ($previousVersion -and $installedVersion -gt $previousVersion) { 'UpdateComplete' } else { 'LaunchNow' }
+    [void]$scheduler.GetFolder('\').GetTask($taskName).Run($launchReason)
     Write-Output 'HDR Control installed. Open HDR Control from the Start menu or use the tray icon.'
 } catch {
     # If an upgrade fails, resume the existing helper where possible.
