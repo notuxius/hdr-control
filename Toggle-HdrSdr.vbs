@@ -7,7 +7,9 @@ script = files.BuildPath(folder, "HdrSdrMenu.ps1")
 powershell = shell.ExpandEnvironmentStrings("%SystemRoot%\System32\WindowsPowerShell\v1.0\powershell.exe")
 action = "Toggle"
 If WScript.Arguments.Count > 0 Then action = WScript.Arguments(0)
+Dim updateComplete
 If action = "Startup" Then
+    If WScript.Arguments.Count = 2 Then updateComplete = (WScript.Arguments(1) = "UpdateComplete")
     ' Missing preference means enabled. Explicit launches always bypass it.
     Dim startupEnabled
     startupEnabled = 1
@@ -16,7 +18,7 @@ If action = "Startup" Then
     On Error GoTo 0
     If startupEnabled = 0 Then
         If WScript.Arguments.Count < 2 Then WScript.Quit 0
-        If WScript.Arguments(1) <> "LaunchNow" Then WScript.Quit 0
+        If WScript.Arguments(1) <> "LaunchNow" And Not updateComplete Then WScript.Quit 0
     End If
     action = "Watch"
 End If
@@ -41,6 +43,7 @@ Select Case action
 End Select
 command = Chr(34) & powershell & Chr(34) & " -NoLogo -NoProfile -NonInteractive -STA -WindowStyle Hidden -ExecutionPolicy Bypass -File " & Chr(34) & script & Chr(34) & " -Action " & action
 If openAbout Then command = command & " -OpenAbout"
+If updateComplete Then command = command & " -UpdateComplete"
 If Len(installOffer) > 0 Then command = command & " -InstallOffer " & installOffer
 If action = "Launch" Then
     If WScript.Arguments.Count <> 2 Then WScript.Quit 2

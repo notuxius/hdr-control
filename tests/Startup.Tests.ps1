@@ -45,18 +45,19 @@ try {
     $vbs = [IO.File]::ReadAllText((Join-Path $repo 'Toggle-HdrSdr.vbs')).Replace('HKCU\Software\HdrContextMenu\',($key.Replace('HKCU:','HKCU')+'\'))
     $launcher = Join-Path $temp 'Toggle-HdrSdr.vbs'
     [IO.File]::WriteAllText($launcher,$vbs)
-    [IO.File]::WriteAllText((Join-Path $temp 'HdrSdrMenu.ps1'), 'param($Action) [IO.File]::WriteAllText((Join-Path $PSScriptRoot "result.txt"),$Action)')
+    [IO.File]::WriteAllText((Join-Path $temp 'HdrSdrMenu.ps1'), 'param($Action,[switch]$UpdateComplete) [IO.File]::WriteAllText((Join-Path $PSScriptRoot "result.txt"),"$Action/$($UpdateComplete.IsPresent)")')
     $sentinel = Join-Path $temp 'result.txt'
-    function Run-Launcher([string]$Arguments, [bool]$ShouldLaunch) {
+    function Run-Launcher([string]$Arguments, [bool]$ShouldLaunch, [string]$Expected='Watch/False') {
         if (Test-Path -LiteralPath $sentinel) { Remove-Item -LiteralPath $sentinel }
         $process = Start-Process -FilePath "$env:SystemRoot\System32\cscript.exe" -ArgumentList ('//NoLogo "'+$launcher+'" '+$Arguments) -WindowStyle Hidden -Wait -PassThru
         if ($process.ExitCode -ne 0) { throw ('Launcher failed: '+$Arguments) }
         if ((Test-Path -LiteralPath $sentinel) -ne $ShouldLaunch) { throw ('Wrong startup behavior: '+$Arguments) }
-        if ($ShouldLaunch -and [IO.File]::ReadAllText($sentinel) -ne 'Watch') { throw 'Launcher chose wrong action' }
+        if ($ShouldLaunch -and [IO.File]::ReadAllText($sentinel) -ne $Expected) { throw 'Launcher chose wrong action' }
     }
     Run-Launcher 'Startup' $false
     Run-Launcher 'Startup ""' $false
     Run-Launcher 'Startup "LaunchNow"' $true
+    Run-Launcher 'Startup "UpdateComplete"' $true 'Watch/True'
     Run-Launcher 'Watch' $true
     Set-HdrStartupEnabled $true
     Set-ItemProperty -LiteralPath $key -Name StartWithWindows -Value 1

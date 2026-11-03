@@ -145,7 +145,6 @@ try {
     $backup = Join-Path $work 'Previous'
     try { Install-HdrUpdate $source $installed $backup $Version }
     catch { if ($_.Exception.Message -like 'Update recovery needs attention*') { $preserve = $true }; throw }
-    [void][Windows.Forms.MessageBox]::Show(('HDR Control has been updated to version ' + $Version + '.'),'Update complete','OK','Information')
 } catch {
     $result = 1
     [void][Windows.Forms.MessageBox]::Show(('Could not finish the update.' + "`n`n" + $_.Exception.Message),'HDR Control','OK','Warning')
