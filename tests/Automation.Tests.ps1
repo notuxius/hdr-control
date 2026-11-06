@@ -53,7 +53,7 @@ try {
         $script:hdrTray.Pending = [pscustomobject]@{HasExited=$false}
     }
     $icon = [pscustomobject]@{Warnings=0}
-    function Show-HdrNotification($Message) { if ($Message -notlike 'HDR turned * automatically *') { $icon.Warnings++ } }
+    function Show-HdrNotification($Message) { if ($Message -like 'Automatic HDR could not read*') { $icon.Warnings++ } }
     $script:hdrTray = @{
         Automation = New-HdrAutomationState
         Pending = $null; UpdateProcess = $null; Icon = $icon
@@ -104,15 +104,9 @@ try {
     Assert ($requests.Count -eq 1) 'Closing some apps must leave HDR on'
     $script:runningNames = @()
     Poll $on
+    Assert ($requests.Count -eq 2 -and $requests[1] -eq 'Off') 'The first scan after the last game exits must request Off by default'
     Update-HdrAutomation $on
-    Assert ($requests.Count -eq 1) 'One empty scan or opening a menu must not end a session'
-    $script:runningNames = @('testgame')
-    Poll $on
-    Assert ($requests.Count -eq 1) 'Launcher handoff must cancel exit grace'
-    $script:runningNames = @()
-    Poll $on
-    Poll $on
-    Assert ($requests.Count -eq 2 -and $requests[1] -eq 'Off') 'Last exit must turn HDR off'
+    Assert ($requests.Count -eq 2) 'An immediate refresh must not duplicate the exit request'
     $script:hdrTray.Pending = $null
     Poll $off
     Assert (-not $hdrTray.Automation.Active) 'Successful off must release automatic control'
@@ -211,7 +205,7 @@ try {
     $script:runningNames = @('newgame')
     Poll $off
     Assert ($requests.Count -eq 1 -and $requests[0] -eq 'On') 'Saved custom edits must apply on the next poll'
-    'PASS: app lists, persistence, launch/exit, multiple apps, grace period, pending commands, retries, reconnects, read failures, pause/resume, and manual overrides.'
+    'PASS: app lists, persistence, immediate exit after the last game, pending commands, retries, reconnects, read failures, pause/resume, and manual overrides.'
 } finally {
     if (Test-Path -LiteralPath $key) { Remove-Item -LiteralPath $key }
     $file = Join-Path $root 'custom.txt'

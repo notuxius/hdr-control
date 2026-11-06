@@ -19,10 +19,47 @@ namespace LocalHdrMenu {
         [DllImport("user32.dll",SetLastError=true)] static extern bool RegisterHotKey(IntPtr window,int id,uint modifiers,uint key);
         [DllImport("user32.dll")] static extern bool UnregisterHotKey(IntPtr window,int id);
         readonly List<int> ids=new List<int>();
+        readonly Dictionary<int,Process> watchedGames=new Dictionary<int,Process>();
+        readonly System.Windows.Forms.Timer exitTimer=new System.Windows.Forms.Timer();
+        public event EventHandler GameExitCheck;
         public event EventHandler DisplayChanged;
         public event EventHandler HotkeyPressed;
         public int LastHotkey;
-        public HdrEventWindow() { ShowInTaskbar=false; var handle=Handle; }
+        public HdrEventWindow() {
+            ShowInTaskbar=false; var handle=Handle;
+            exitTimer.Tick+=delegate {
+                exitTimer.Stop();
+                if (GameExitCheck!=null) GameExitCheck(this,EventArgs.Empty);
+            };
+        }
+        public void ScheduleExitCheck(int milliseconds) {
+            exitTimer.Stop();
+            if (milliseconds>0) { exitTimer.Interval=milliseconds; exitTimer.Start(); }
+        }
+        public void WatchGames(int[] processIds) {
+            var current=new HashSet<int>(processIds);
+            foreach (int id in new List<int>(watchedGames.Keys)) {
+                if (!current.Contains(id)) { watchedGames[id].Dispose(); watchedGames.Remove(id); }
+            }
+            foreach (int id in current) {
+                if (watchedGames.ContainsKey(id)) continue;
+                Process game=null;
+                try {
+                    game=Process.GetProcessById(id);
+                    game.SynchronizingObject=this;
+                    game.Exited+=OnGameExited;
+                    game.EnableRaisingEvents=true;
+                    watchedGames.Add(id,game);
+                    game=null; // The window now owns this handle.
+                } catch (ArgumentException) { ScheduleExitCheck(1); } // Already exited.
+                catch (InvalidOperationException) { ScheduleExitCheck(1); }
+                catch (System.ComponentModel.Win32Exception) { } // Protected game: rely on regular scans.
+                finally { if (game!=null) game.Dispose(); }
+            }
+        }
+        void OnGameExited(object sender,EventArgs args) {
+            if (!IsDisposed && !Disposing) ScheduleExitCheck(1);
+        }
         public bool Bind(int id,uint modifiers,uint key) {
             if (!RegisterHotKey(Handle,id,modifiers|0x4000,key)) return false;
             ids.Add(id); return true;
@@ -35,7 +72,15 @@ namespace LocalHdrMenu {
             if (m.Msg==0x0312) { LastHotkey=m.WParam.ToInt32(); if (HotkeyPressed!=null) HotkeyPressed(this,EventArgs.Empty); }
             base.WndProc(ref m);
         }
-        protected override void Dispose(bool disposing) { if(disposing) ClearHotkeys(); base.Dispose(disposing); }
+        protected override void Dispose(bool disposing) {
+            if (disposing) {
+                ClearHotkeys();
+                exitTimer.Dispose();
+                foreach (Process game in watchedGames.Values) game.Dispose();
+                watchedGames.Clear();
+            }
+            base.Dispose(disposing);
+        }
     }
     public static class ProfileUi {
         public static void Initialize(Form form,string title,int width,int height,bool fixedSize=false) {
@@ -81,7 +126,7 @@ namespace LocalHdrMenu {
             Controls.Add(ProfileUi.Label("Monitors",16,130)); Targets.SetBounds(220,128,440,112); Targets.CheckOnClick=true;
             Controls.Add(ProfileUi.Label("No selection means all active HDR monitors.",220,244,440));
             Controls.Add(ProfileUi.Label("Delay before HDR (s)",16,281)); StartDelay.SetBounds(220,275,140,36); StartDelay.Maximum=300;
-            Controls.Add(ProfileUi.Label("After exit (s)",380,281,130)); ExitDelay.SetBounds(520,275,140,36); ExitDelay.Minimum=2; ExitDelay.Maximum=300;
+            Controls.Add(ProfileUi.Label("After exit (s)",380,281,130)); ExitDelay.SetBounds(520,275,140,36); ExitDelay.Minimum=0; ExitDelay.Maximum=300;
             Controls.Add(ProfileUi.Label("When the game exits",16,320)); ExitPolicy.SetBounds(220,318,440,28); ExitPolicy.DropDownStyle=ComboBoxStyle.DropDownList;
             ExitPolicy.Items.AddRange(new object[]{"Use default","Return to SDR","Restore previous state"}); ExitPolicy.SelectedIndex=0;
             Controls.Add(ProfileUi.Label("Launch with HDR",16,366)); LaunchPath.SetBounds(220,364,340,28);

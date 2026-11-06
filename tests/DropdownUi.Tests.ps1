@@ -13,6 +13,11 @@ public static class DropdownProbe {
     [DllImport("user32.dll")] public static extern IntPtr SendMessage(IntPtr window,int message,IntPtr wparam,IntPtr lparam);
     [DllImport("user32.dll")] static extern bool GetComboBoxInfo(IntPtr window,ref Info info);
     [DllImport("user32.dll")] static extern bool GetWindowRect(IntPtr window,out Rect rect);
+    [DllImport("user32.dll")] static extern int GetWindowLong(IntPtr window,int index);
+    [DllImport("user32.dll")] static extern int GetWindowRgn(IntPtr window,IntPtr region);
+    [DllImport("gdi32.dll")] static extern IntPtr CreateRectRgn(int left,int top,int right,int bottom);
+    [DllImport("gdi32.dll")] static extern bool PtInRegion(IntPtr region,int x,int y);
+    [DllImport("gdi32.dll")] static extern bool DeleteObject(IntPtr handle);
     public static void Key(IntPtr window,int key) {
         SendMessage(window,0x100,(IntPtr)key,IntPtr.Zero);
         SendMessage(window,0x101,(IntPtr)key,IntPtr.Zero);
@@ -21,6 +26,30 @@ public static class DropdownProbe {
         var info=new Info {Size=Marshal.SizeOf(typeof(Info))};
         if(!GetComboBoxInfo(window,ref info)) throw new Exception("Cannot find dropdown");
         return info.List;
+    }
+    public static bool HasDarkFrame(IntPtr window) {
+        var list=Popup(window);
+        return (GetWindowLong(list,-16)&0x00800000)==0 && (GetWindowLong(list,-20)&0x00000200)==0;
+    }
+    public static bool HasRoundedCorners(IntPtr window) {
+        var list=Popup(window); Rect rect; GetWindowRect(list,out rect);
+        var region=CreateRectRgn(0,0,0,0);
+        try {
+            return GetWindowRgn(list,region)!=0 && !PtInRegion(region,0,0) &&
+                !PtInRegion(region,rect.Right-rect.Left-1,rect.Bottom-rect.Top-1) &&
+                PtInRegion(region,(rect.Right-rect.Left)/2,(rect.Bottom-rect.Top)/2);
+        } finally { DeleteObject(region); }
+    }
+    public static bool ErasesDark(IntPtr window,Color surface) {
+        using(var bitmap=new Bitmap(24,24)) {
+            using(var graphics=Graphics.FromImage(bitmap)) {
+                graphics.Clear(Color.White);
+                var dc=graphics.GetHdc();
+                try { SendMessage(Popup(window),0x14,dc,IntPtr.Zero); }
+                finally { graphics.ReleaseHdc(dc); }
+            }
+            return bitmap.GetPixel(0,0).ToArgb()==surface.ToArgb() && bitmap.GetPixel(23,23).ToArgb()==surface.ToArgb();
+        }
     }
     public static void PointAt(IntPtr window,int row,int height,bool click) {
         var list=Popup(window);
@@ -56,11 +85,19 @@ foreach($scale in @(1.0,1.25,1.5,2.0)) {
         $form.Scale([Drawing.SizeF]::new($scale,$scale)); $form.Font=[Drawing.Font]::new('Segoe UI',[single](10*$scale))
         $form.AddPreset('sample','Gaming'); $form.Preset.SelectedIndex=0
         $form.Show(); [Windows.Forms.Application]::DoEvents()
+        if(-not [Windows.Forms.SystemInformation]::HighContrast) {
+            Assert ([DropdownProbe]::HasDarkFrame($form.Action.Handle)) 'Native light frame remains before the first dropdown opening'
+            Assert ([DropdownProbe]::ErasesDark($form.Action.Handle,[LocalHdrMenu.DialogTheme]::Surface)) 'Animation buffer erases to a light background'
+        }
         $form.Action.Focus() | Out-Null
         [DropdownProbe]::Key($form.Action.Handle,40)
         Assert ($form.Action.SelectedIndex -eq 1) 'Arrow-key selection failed'
         $form.Action.DroppedDown=$true; [Windows.Forms.Application]::DoEvents()
         Assert $form.Action.DroppedDown 'Dropdown did not open'
+        if(-not [Windows.Forms.SystemInformation]::HighContrast) {
+            Assert ([DropdownProbe]::HasDarkFrame($form.Action.Handle)) 'Opening restored the native light frame'
+            Assert ([DropdownProbe]::HasRoundedCorners($form.Action.Handle)) "Popup corners are square at scale $scale"
+        }
         $path=if($OutputDirectory) { Join-Path $OutputDirectory ('dropdown-'+[int]($scale*100)+'.png') }
         foreach($row in @(0,2,3,1,0)) {
             [DropdownProbe]::PointAt($form.Action.Handle,$row,$form.Action.ItemHeight,$false)
@@ -79,6 +116,15 @@ foreach($scale in @(1.0,1.25,1.5,2.0)) {
         Assert (-not $form.Preset.Enabled -and $form.Targets.Enabled) 'HDR action did not update dependent controls'
         $form.Key.SelectedItem=[Windows.Forms.Keys]::H
         Assert ($form.Key.SelectedItem -eq [Windows.Forms.Keys]::H) 'Key value was not preserved'
+        $form.Key.DroppedDown=$true; [Windows.Forms.Application]::DoEvents()
+        [DropdownProbe]::Key($form.Key.Handle,35) # End scrolls a list longer than its viewport.
+        [DropdownProbe]::Key($form.Key.Handle,13); [Windows.Forms.Application]::DoEvents()
+        Assert ($form.Key.SelectedIndex -eq $form.Key.Items.Count-1) 'Long dropdown did not scroll and select its last item'
+        $form.Key.DroppedDown=$true; [Windows.Forms.Application]::DoEvents()
+        if(-not [Windows.Forms.SystemInformation]::HighContrast) {
+            Assert ([DropdownProbe]::HasRoundedCorners($form.Key.Handle)) 'Reopened scrolling dropdown lost its rounded region'
+        }
+        [DropdownProbe]::Key($form.Key.Handle,27)
         Assert ($form.Action.ItemHeight -ge $form.Action.Font.Height+8) 'Dropdown rows clip scaled text'
     } finally { $form.Dispose() }
 }
@@ -90,4 +136,4 @@ try {
     $form.RefreshAvailability($true,$false,'')
     Assert ($form.NightLightSettings.Visible -and [LocalHdrMenu.MonitorBrightness]::Capture($form).Mode -eq 'NightLight') 'Hovering changed the displayed or autosaved switching mode'
 } finally { $form.Dispose() }
-'PASS: dropdown hover, checkmarks, mouse and keyboard selection at 100-200% scale, and brightness mode during hover.'
+'PASS: dark animation buffers, rounded popup frames, hover, checkmarks, scrolling and mouse/keyboard selection at 100-200% scale, and brightness mode during hover.'

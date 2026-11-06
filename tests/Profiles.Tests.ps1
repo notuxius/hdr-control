@@ -44,11 +44,11 @@ try {
     $script:running=@('game'); Poll
     Assert ($notifications.Count -eq 0) 'Pending HDR must stay quiet'
     Finish; Poll; Finish; Poll
-    Assert ($calls.Count -eq 2 -and $notifications.Count -eq 1 -and $notifications[0] -ceq 'HDR turned on automatically for game.exe.') 'Enabling two monitors must notify once with the detected game name'
+    Assert ($calls.Count -eq 2 -and $notifications.Count -eq 1 -and $notifications[0] -ceq 'HDR turned on automatically.') 'Enabling two monitors must notify once without a game name'
     $script:running=@(); Poll; Poll
     Assert ($notifications.Count -eq 1) 'An exit must wait for a confirmed off command'
     Finish; Poll; Finish; Poll
-    Assert ($notifications.Count -eq 2 -and $notifications[1] -ceq 'HDR turned off automatically after game.exe exited.') 'Restoring two monitors must notify once'
+    Assert ($notifications.Count -eq 2 -and $notifications[1] -ceq 'HDR turned off automatically.') 'Restoring two monitors must notify once'
     $script:running=@('game'); Poll; Finish
     Assert ($notifications.Count -eq 3) 'A new launch must notify again'
 
@@ -106,7 +106,23 @@ try {
     Finish $false; Poll
     Assert ($notifications.Count -eq 1) 'A failed off command must not announce success'
     $script:now=$now.AddSeconds(30); Poll; Finish
-    Assert ($notifications.Count -eq 2 -and $notifications[1] -ceq 'HDR turned off automatically after second.exe exited.') 'A successful exit retry must name the last game on the monitor'
+    Assert ($notifications.Count -eq 2 -and $notifications[1] -ceq 'HDR turned off automatically.') 'A successful exit retry must notify once without a game name'
+
+    Reset
+    $rule=AddRule 'game.exe' @((Get-HdrBrightnessKey $a)) 'Restore' 0 10
+    $script:running=@('game'); Poll; Finish
+    $script:running=@(); Poll; Poll; Poll
+    Assert ($notifications.Count -eq 1) 'Exit delay must not send an advance notification'
+    $script:running=@('game'); Poll
+    Assert ($calls.Count -eq 1) 'Restarting during the delay must cancel shutdown'
+    $script:running=@(); Poll
+    Assert ($notifications.Count -eq 1) 'Exiting again after a restart must stay quiet during the delay'
+
+    Reset
+    $a.HdrEnabled=$true
+    $rule=AddRule 'game.exe' @((Get-HdrBrightnessKey $a)) 'Restore'
+    $script:running=@('game'); Poll; $script:running=@(); Poll; Poll
+    Assert ($notifications.Count -eq 0) 'Restoring already-enabled HDR must not warn about turning it off'
 
     Reset
     $rule=AddRule 'game.exe' @((Get-HdrBrightnessKey $a))

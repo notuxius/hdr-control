@@ -652,17 +652,13 @@ function Get-HdrAppListState([switch]$IncludeDisabledDefaults) {
         }
     }
     foreach ($key in $excluded.Keys) { $names.Remove($key) }
-    $defaultOverrides=@{}
     foreach ($rule in (Read-HdrProfiles).Rules) {
         $key=ConvertTo-HdrAppKey $rule.Executable
-        if ($rule.KeepInDefaults -and $defaults.ContainsKey($key) -and -not $custom.ContainsKey($key) -and -not $excluded.ContainsKey($key)) {
-            $defaultOverrides[$key]=$true
-        }
         $custom[$key]=$true
         if ($rule.Enabled) { $names[$key]=$true; $excluded.Remove($key) }
         else { $names.Remove($key); $excluded[$key]=$true }
     }
-    return @{Defaults=$defaults;Custom=$custom;Excluded=$excluded;Effective=$names;DefaultOverrides=$defaultOverrides}
+    return @{Defaults=$defaults;Custom=$custom;Excluded=$excluded;Effective=$names}
 }
 
 function Get-HdrWatchedApps { return (Get-HdrAppListState).Effective }
@@ -745,14 +741,16 @@ function Get-HdrGameListRows {
         foreach ($key in $script:hdrTray.InstalledApps.Keys) { $installed[$key] = $true }
     }
     foreach ($key in $installed.Keys) { if ($lists.Defaults.ContainsKey($key)) { $all[$key] = $true } }
-    foreach ($map in @($lists.Custom,$lists.Excluded,$detected)) {
-        foreach ($key in $map.Keys) { $all[$key] = $true }
+    foreach ($key in $detected.Keys) { $all[$key] = $true }
+    foreach ($map in @($lists.Custom,$lists.Excluded)) {
+        foreach ($key in $map.Keys) {
+            if (-not $lists.Defaults.ContainsKey($key)) { $all[$key] = $true }
+        }
     }
     $automatic = Get-HdrAutomationPreference 'AutomaticHdr'
     foreach ($key in @($all.Keys | Sort-Object)) {
         $section = if ($detected.ContainsKey($key)) { 'Auto-detected' }
-            elseif ($lists.DefaultOverrides.ContainsKey($key) -and $installed.ContainsKey($key)) { 'Installed' }
-            elseif ($lists.Custom.ContainsKey($key) -or $lists.Excluded.ContainsKey($key)) { 'Custom' } else { 'Installed' }
+            elseif ($lists.Defaults.ContainsKey($key)) { 'Installed' } else { 'Custom' }
         $status = if ($lists.Excluded.ContainsKey($key)) { 'Excluded by custom list' }
             elseif (-not $lists.Effective.ContainsKey($key)) {
                 if ($lists.Defaults.ContainsKey($key)) { 'Defaults disabled' } else { 'No longer in defaults' }
@@ -779,8 +777,6 @@ function Set-HdrGameEnabled([string[]]$Executable,[bool]$Enabled) {
         $rule=$byName[$key]
         if ($null -eq $rule) {
             $rule=New-HdrGameRule $name
-            # A checkbox on a default should remain in place so it can be checked again.
-            $rule | Add-Member NoteProperty KeepInDefaults $true
             $byName[$key]=$rule
             $rule
         }
@@ -907,14 +903,18 @@ function Show-HdrAppSettings([string]$DisplayId) {
     $script:hdrTray.SettingsWindow.Show()
 }
 
-function Get-HdrRunningAppNames {
+function Get-HdrRunningAppNames([hashtable]$ProcessIds) {
     # Match the running game itself, including direct EXE/offline installs.
     # No storefront client, parent launcher, install path, or store manifest is required.
     $session = [Diagnostics.Process]::GetCurrentProcess().SessionId
     $processes = @(Get-Process -ErrorAction Stop)
     foreach ($process in $processes) {
         try {
-            if ($process.SessionId -eq $session) { $process.ProcessName }
+            if ($process.SessionId -eq $session) {
+                $name=$process.ProcessName
+                if ($null -ne $ProcessIds) { $ProcessIds[$name]+= @($process.Id) }
+                $name
+            }
         } catch [InvalidOperationException] {
             # A process can exit between enumeration and reading its name.
         } finally { $process.Dispose() }
@@ -963,18 +963,61 @@ function Get-HdrTrayState($Displays) {
     }
 }
 
+function Update-HdrTrayIndicator {
+    $icon = $script:hdrTray.BaseIcon
+    if ($null -eq $icon) { return }
+    $tooltip = $script:hdrTray.Status.TrayIconText
+    if ($script:hdrTray.AvailableVersion) {
+        $key = $icon.Handle.ToInt64()
+        if (-not $script:hdrTray.UpdateIcons.ContainsKey($key)) {
+            $script:hdrTray.UpdateIcons[$key] = [LocalHdrMenu.TrayUpdateBadge]::Create($icon)
+        }
+        $icon = $script:hdrTray.UpdateIcons[$key]
+        $tooltip = 'Update available: v' + $script:hdrTray.AvailableVersion + "`n" + $tooltip
+    }
+    $script:hdrTray.Icon.Icon = $icon
+    $script:hdrTray.Icon.Text = $tooltip.Substring(0,[Math]::Min(63,$tooltip.Length))
+    [LocalHdrMenu.TrayIconPosition]::Refresh($script:hdrTray.Icon)
+}
+
+function Set-HdrAvailableUpdate([string]$Version) {
+    $script:hdrTray.AvailableVersion = $Version
+    $script:hdrTray.AboutWindow.SetAvailableVersion($Version)
+    $script:hdrTray.CheckUpdates.Text = if ($Version) { 'Install update' } else { 'Check for updates' }
+    if ($Version) {
+        $script:hdrTray.UpdateAvailable.Text = 'Update available: v' + $Version + '...'
+        if (-not $script:hdrTray.Menu.Items.Contains($script:hdrTray.UpdateAvailable)) {
+            $script:hdrTray.Menu.Items.Insert(3,$script:hdrTray.UpdateAvailable)
+        }
+    } else { $script:hdrTray.Menu.Items.Remove($script:hdrTray.UpdateAvailable) }
+    try { [Microsoft.Win32.Registry]::SetValue($script:hdrUpdateSettingsKey,'AvailableUpdateVersion',$Version) }
+    catch { Write-HdrDiagnostic 'UPDATE' ('Could not save the available update: ' + $_.Exception.Message) }
+    Update-HdrTrayIndicator
+}
+
+function Restore-HdrAvailableUpdate {
+    $version = [string][Microsoft.Win32.Registry]::GetValue($script:hdrUpdateSettingsKey,'AvailableUpdateVersion','')
+    try {
+        if ($version -and (ConvertTo-HdrVersion $version) -gt (ConvertTo-HdrVersion (Get-HdrInstalledVersion))) {
+            Set-HdrAvailableUpdate $version
+            return
+        }
+    } catch { } # Ignore invalid or obsolete cached releases.
+    Set-HdrAvailableUpdate ''
+}
+
 function Set-HdrTrayState($State) {
     $script:hdrTray.Status.SetCombinedStatus($State.Status, $script:hdrTray.Decision)
     $automatic = Get-HdrAutomationPreference 'AutomaticHdr'
     Set-HdrAutomaticMenuState $automatic
-    $script:hdrTray.Icon.Icon = switch ($State.IconState) {
+    $script:hdrTray.BaseIcon = switch ($State.IconState) {
         { $_ -in 'Enabled','AutoEnabled' } { if ($automatic) { $script:hdrTray.AutoEnabledIcon } else { $script:hdrTray.EnabledIcon } }
         'Disabled' { if ($automatic) { $script:hdrTray.AutoIdleIcon } else { $script:hdrTray.DisabledIcon } }
         default { $script:hdrTray.UnavailableIcon }
     }
     # Explorer can miss an icon update during a display reconnect. Resend even
     # when the managed Icon property already holds the desired image.
-    [LocalHdrMenu.TrayIconPosition]::Refresh($script:hdrTray.Icon)
+    Update-HdrTrayIndicator
     if ($null -ne $script:hdrTray.PressTracker) { $script:hdrTray.PressTracker.RefreshAnchor() }
     $script:hdrTray.Command.Text = if ($State.Available) { $State.Command } else { 'Enable HDR' }
     $script:hdrTray.Command.Tag = $State.Action
@@ -1208,6 +1251,13 @@ function Start-HdrUpdateCheck([switch]$FromNotification, [switch]$Automatic) {
     Update-HdrCommunityUpdateButton
 }
 
+function Save-HdrLastUpdateCheck {
+    $utc = [DateTimeOffset]::UtcNow.ToString('o')
+    $script:hdrTray.AboutWindow.SetLastUpdateCheck($utc)
+    try { [Microsoft.Win32.Registry]::SetValue($script:hdrUpdateSettingsKey,'LastUpdateCheckUtc',$utc) }
+    catch { Write-HdrDiagnostic 'UPDATE' ('Could not save the last update check: ' + $_.Exception.Message) }
+}
+
 function Complete-HdrUpdateCheck {
     $check = $script:hdrTray.UpdateCheck
     if ($null -eq $check -or -not $check.Finished) { return }
@@ -1224,9 +1274,8 @@ function Complete-HdrUpdateCheck {
             if ($release.draft -ne $false -or $release.prerelease -ne $false -or $release.tag_name -cnotmatch '^v(.+)$') { throw 'Invalid release response' }
             $latest = $Matches[1]
             if ((ConvertTo-HdrVersion $latest) -gt $currentVersion) {
-                $script:hdrTray.AvailableVersion = $latest
-                $script:hdrTray.CheckUpdates.Text = 'Install update'
-                $script:hdrTray.AboutWindow.SetAvailableVersion($latest)
+                Set-HdrAvailableUpdate $latest
+                Save-HdrLastUpdateCheck
                 $script:hdrTray.CheckedForUpdates = $true
                 if (-not $script:hdrTray.CheckFromNotification) {
                     Show-HdrNotification "A newer version is available: $latest (installed: $installed).`nClick to install the update." -InstallVersion $latest
@@ -1234,9 +1283,9 @@ function Complete-HdrUpdateCheck {
                 return
             }
         }
-        $script:hdrTray.AvailableVersion = $null
+        Set-HdrAvailableUpdate ''
+        Save-HdrLastUpdateCheck
         Remove-ItemProperty -LiteralPath ('Registry::'+$script:hdrUpdateSettingsKey) -Name UpdateOffer -ErrorAction SilentlyContinue
-        $script:hdrTray.AboutWindow.SetAvailableVersion($null)
         $script:hdrTray.CheckedForUpdates = $true
         if ($script:hdrTray.AboutWindow.Visible) { $script:hdrTray.AboutWindow.SetUpToDate($true) }
         if (-not $script:hdrTray.CheckFromNotification -and -not $script:hdrTray.AutomaticUpdateCheck) {
@@ -1262,9 +1311,7 @@ function Install-HdrNotificationUpdate([string]$Id) {
     }
     # Ignore a background check that would otherwise overwrite the installer's button state.
     $script:hdrTray.UpdateCheck = $null
-    $script:hdrTray.AvailableVersion = $version
-    $script:hdrTray.AboutWindow.SetAvailableVersion($version)
-    $script:hdrTray.CheckUpdates.Text = 'Install update'
+    Set-HdrAvailableUpdate $version
     $script:hdrTray.CheckUpdates.Enabled = $true
     Update-HdrCommunityUpdateButton
     Start-HdrAppUpdate $version
@@ -1390,6 +1437,8 @@ function Initialize-HdrTray {
         About = New-Object Windows.Forms.ToolStripMenuItem('About')
         UpdateCheck = $null
         UpdateProcess = $null
+        UpdateAvailable = New-Object Windows.Forms.ToolStripMenuItem('Update available...')
+        UpdateIcons = @{}
         Exit = New-Object Windows.Forms.ToolStripMenuItem('Exit')
         Timer = New-Object Windows.Forms.Timer
         EnabledIcon = [Drawing.Icon]::new((Join-Path $PSScriptRoot 'HdrEnabledPaused.ico'), [Windows.Forms.SystemInformation]::SmallIconSize)
@@ -1404,8 +1453,9 @@ function Initialize-HdrTray {
     $script:hdrTray.Status.Enabled = $false
     $script:hdrTray.DisplayName.Enabled = $false
     $script:hdrTray.Icon.Icon = $script:hdrTray.UnavailableIcon
+    $script:hdrTray.BaseIcon = $script:hdrTray.UnavailableIcon
     $script:hdrTray.Icon.ContextMenuStrip = $null
-    $script:hdrTray.Status.add_TextChanged({ $script:hdrTray.Icon.Text = $script:hdrTray.Status.TrayIconText })
+    $script:hdrTray.Status.add_TextChanged({ Update-HdrTrayIndicator })
     $script:hdrTray.Menu.ShowImageMargin = $false
     $script:hdrTray.ControlsMenu.ShowImageMargin = $false
     $script:hdrTray.Menu.AnchorIcon = $script:hdrTray.Icon
@@ -1439,6 +1489,7 @@ function Initialize-HdrTray {
     $script:hdrTray.AppSettings.Name = 'AppSettings'
     Set-HdrAutomaticMenuState (Get-HdrAutomationPreference 'AutomaticHdr')
     $script:hdrTray.CheckUpdates = $script:hdrTray.AboutWindow.CheckUpdates
+    $script:hdrTray.AboutWindow.SetLastUpdateCheck([string][Microsoft.Win32.Registry]::GetValue($script:hdrUpdateSettingsKey,'LastUpdateCheckUtc',''))
     $autoCheck = $script:hdrTray.AboutWindow.AutoCheckUpdates
     $autoCheck.Checked = [Microsoft.Win32.Registry]::GetValue($script:hdrUpdateSettingsKey,'AutoCheckUpdates',0) -eq 1
     $nextCheck = [Microsoft.Win32.Registry]::GetValue($script:hdrUpdateSettingsKey,'NextUpdateCheck',0)
@@ -1468,6 +1519,8 @@ function Initialize-HdrTray {
         else { Start-HdrUpdateCheck }
     })
     $script:hdrTray.About.add_Click({ Show-HdrAbout })
+    $script:hdrTray.UpdateAvailable.Name = 'AvailableUpdate'
+    $script:hdrTray.UpdateAvailable.add_Click({ Show-HdrAbout })
     # MouseClick suppresses the second click of a double-click; MouseUp lets
     # every left/right click toggle, including fast consecutive clicks.
     $script:hdrTray.Icon.add_MouseUp({
@@ -1503,6 +1556,11 @@ function Initialize-HdrTray {
         }
     })
     $script:hdrTray.EventTimer.Interval=350
+    $script:hdrTray.EventWindow.add_GameExitCheck({
+        if ($script:hdrTray.Refreshing) { $script:hdrTray.EventWindow.ScheduleExitCheck(50); return }
+        $script:hdrTray.Automation.LastPoll=[DateTime]::MinValue
+        Update-HdrTray
+    })
     $script:hdrTray.EventWindow.add_DisplayChanged({
         $script:hdrTray.EventRetries=3
         $script:hdrTray.EventTimer.Start()
@@ -1518,6 +1576,7 @@ function Initialize-HdrTray {
     })
     try { Register-HdrBindings } catch { Write-HdrDiagnostic 'SHORTCUT' $_.Exception.Message }
     $script:hdrTray.PressTracker = [LocalHdrMenu.TrayPressTracker]::new($script:hdrTray.Icon,$script:hdrTray.ControlsMenu,$script:hdrTray.Menu)
+    Restore-HdrAvailableUpdate
 }
 
 function Close-HdrTray {
@@ -1532,6 +1591,8 @@ function Close-HdrTray {
     $script:hdrTray.Icon.Visible = $false
     $script:hdrTray.Timer.Dispose()
     $script:hdrTray.Icon.Dispose()
+    foreach ($icon in $script:hdrTray.UpdateIcons.Values) { $icon.Dispose() }
+    $script:hdrTray.UpdateAvailable.Dispose()
     $script:hdrTray.Menu.Dispose()
     $script:hdrTray.ControlsMenu.Dispose()
     $script:hdrTray.EnabledIcon.Dispose()

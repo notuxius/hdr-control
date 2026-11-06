@@ -15,7 +15,7 @@ function Test-HdrProfiles($Data) {
         if (-not $key -or $rule.Executable.StartsWith('!') -or $seen.ContainsKey($key) -or
             $rule.Enabled -isnot [bool] -or $rule.ExitPolicy -notin @('Default','Sdr','Restore') -or
             $rule.StartDelay -isnot [int] -or $rule.StartDelay -lt 0 -or $rule.StartDelay -gt 300 -or
-            $rule.ExitDelay -isnot [int] -or $rule.ExitDelay -lt 2 -or $rule.ExitDelay -gt 300 -or
+            $rule.ExitDelay -isnot [int] -or $rule.ExitDelay -lt 0 -or $rule.ExitDelay -gt 300 -or
             $rule.Id -cnotmatch '^[a-f0-9]{32}$' -or $ids.ContainsKey([string]$rule.Id) -or $rule.Targets -isnot [array]) { throw 'Invalid or duplicate game rule.' }
         $seen[$key]=$true; $ids[$rule.Id]=$true
         if (@($rule.Targets | Select-Object -Unique).Count -ne @($rule.Targets).Count) { throw 'Duplicate game monitor.' }
@@ -80,7 +80,7 @@ function Write-HdrAtomicText([string]$Path,[string]$Text) {
 }
 function New-HdrGameRule([string]$Executable) {
     [pscustomobject]@{Id=[Guid]::NewGuid().ToString('N');Executable=$Executable;Enabled=$true;ExactPath='';
-        Targets=@();StartDelay=0;ExitDelay=2;ExitPolicy='Default';LaunchPath='';Arguments='';WorkingDirectory=''}
+        Targets=@();StartDelay=0;ExitDelay=0;ExitPolicy='Default';LaunchPath='';Arguments='';WorkingDirectory=''}
 }
 function Get-HdrMonitorKey($Display) {
     $key=Get-HdrBrightnessKey $Display
@@ -152,10 +152,14 @@ function Update-HdrPolicy($Displays) {
     if ($null -eq $script:hdrTray.Launches) { $script:hdrTray.Launches=@{} }
     if (($now-$state.LastPoll).TotalSeconds -lt 2) { return }; $state.LastPoll=$now
     $automatic=Get-HdrAutomationPreference 'AutomaticHdr'
-    if (-not $automatic -and -not $script:hdrTray.Launches.Count -and -not $state.Active) { Set-HdrDecision 'Automatic HDR is paused'; return }
+    if (-not $automatic -and -not $script:hdrTray.Launches.Count -and -not $state.Active) {
+        if ($script:hdrTray.EventWindow) { $script:hdrTray.EventWindow.WatchGames(@()) }
+        Set-HdrDecision 'Automatic HDR is paused'; return
+    }
     try {
         $profiles=Read-HdrProfiles; $lists=Get-HdrAppListState
-        $running=@{}; foreach ($name in @(Get-HdrRunningAppNames)) { $key=ConvertTo-HdrAppKey $name; if ($key) { $running[$key]=$name } }
+        $processIds=@{}
+        $running=@{}; foreach ($name in @(Get-HdrRunningAppNames $processIds)) { $key=ConvertTo-HdrAppKey $name; if ($key) { $running[$key]=$name } }
         $rules=@{}; foreach ($rule in $profiles.Rules) { $rules[(ConvertTo-HdrAppKey $rule.Executable)]=$rule }
         $matches=@{}
         if ($automatic) {
@@ -199,15 +203,27 @@ function Update-HdrPolicy($Displays) {
         $state.Sessions[$key].EmptySince=$null; $state.Sessions[$key].Rule=$matches[$key]
         if ($running.ContainsKey($key)) { $state.Sessions[$key].SeenRunning=$true }
     }
+    $nextExit=[DateTime]::MaxValue
     foreach ($key in @($state.Sessions.Keys)) {
         $s=$state.Sessions[$key]
         if (-not $matches.ContainsKey($key)) {
             if ($null -eq $s.EmptySince) { $s.EmptySince=$now }
-            if (($now-$s.EmptySince).TotalSeconds -ge $s.Rule.ExitDelay) {
+            $deadline=$s.EmptySince.AddSeconds($s.Rule.ExitDelay)
+            if ($now -ge $deadline) {
                 $s.Exited=$s.SeenRunning -and -not $running.ContainsKey($key)
                 $state.Sessions.Remove($key)
-            }
+            } elseif ($deadline -lt $nextExit) { $nextExit=$deadline }
         }
+    }
+    if ($script:hdrTray.EventWindow) {
+        $wait=if ($nextExit -eq [DateTime]::MaxValue) { 0 } else {
+            [Math]::Max(1,[Math]::Ceiling(($nextExit-(Get-HdrAutomationTime)).TotalMilliseconds))
+        }
+        $script:hdrTray.EventWindow.ScheduleExitCheck($wait)
+        $watchIds=@(foreach ($key in $matches.Keys) {
+            if ($running.ContainsKey($key)) { $processIds[$running[$key]] }
+        })
+        $script:hdrTray.EventWindow.WatchGames([int[]]$watchIds)
     }
     $demand=@{}; $present=@{}
     foreach ($d in $Displays) {
@@ -292,13 +308,12 @@ function Complete-HdrPolicyCommand([bool]$Success) {
     $entry.Pending=$false
     if ($Success) { $entry.Expected=$op.Target; $entry.Owned=$true; $entry.RetryAt=[DateTime]::MinValue }
     if ($Success -and -not $entry.Released -and $op.NotifySessions.Count) {
-        $games=($op.NotifySessions | ForEach-Object { $_.Rule.Executable } | Sort-Object -Unique) -join ', '
         if ($op.Target) {
             foreach ($session in $op.NotifySessions) { $session.Notified=$true }
-            Show-HdrNotification ('HDR turned on automatically for '+$games+'.')
+            Show-HdrNotification 'HDR turned on automatically.'
         } else {
             foreach ($session in $op.NotifySessions) { $session.ExitNotified=$true }
-            Show-HdrNotification ('HDR turned off automatically after '+$games+' exited.')
+            Show-HdrNotification 'HDR turned off automatically.'
         }
     }
     Write-HdrDiagnostic 'DISPLAY' ('Automatic change '+$op.Target+' success='+$Success)

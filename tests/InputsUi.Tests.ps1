@@ -77,10 +77,10 @@ foreach($scale in @(1.0,1.25,1.5,2.0)) {
         $game.StartDelay.Editor.Text='300'
         $game.StartDelay.Step(1)
         Assert ($game.StartDelay.Value -eq 300) 'Game delay exceeded its upper limit'
-        $game.ExitDelay.Value=2; $game.ExitDelay.Step(-1)
-        Assert ($game.ExitDelay.Value -eq 2) 'Exit delay fell below its safe minimum'
+        $game.ExitDelay.Value=1; $game.ExitDelay.Step(-1); $game.ExitDelay.Step(-1)
+        Assert ($game.ExitDelay.Value -eq 0) 'Exit delay must support immediate restoration and stop at zero'
         $game.ExitDelay.Editor.Text='invalid'
-        Assert ($game.ExitDelay.Value -eq 2 -and $game.ExitDelay.Editor.Text -eq '2') 'Invalid delay text was not restored'
+        Assert ($game.ExitDelay.Value -eq 0 -and $game.ExitDelay.Editor.Text -eq '0') 'Invalid delay text was not restored'
         $game.StartDelay.Editor.Text='12'; $game.StartDelay.Step(1)
         Assert ($game.StartDelay.Value -eq 13) 'Stepper ignored the typed delay'
         Snapshot $game ('game-controls-'+[int]($scale*100))
