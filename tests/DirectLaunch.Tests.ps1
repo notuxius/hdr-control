@@ -9,6 +9,7 @@ $gameName = 'HdrStandalone-' + [Guid]::NewGuid().ToString('N')
 $game = $null
 New-Item -ItemType Directory -Path $root | Out-Null
 function Get-HdrCustomAppsPath { return Join-Path $root 'custom.txt' }
+function Get-HdrProfilesPath { return Join-Path $root 'profiles.json' }
 function Get-HdrDetectedAppsPath { return Join-Path $root 'detected.json' }
 function Get-HdrDefaultAppNames { return @($gameName + '.exe') }
 function Get-HdrAutomationPreference([string]$Name) {
@@ -34,7 +35,7 @@ $off = @([pscustomobject]@{DevicePath='Test monitor';DisplayId='dGVzdA==';HdrSup
 $on = @([pscustomobject]@{DevicePath='Test monitor';DisplayId='dGVzdA==';HdrSupported=$true;HdrEnabled=$true})
 $icon = [pscustomobject]@{}
 function Show-HdrNotification($Message) {
-    Assert ($Message -in @(('HDR turned on automatically for '+$gameName+'.exe.'),('HDR turned off automatically after '+$gameName+'.exe exited.'))) $Message
+    Assert ($Message -in @('HDR turned on automatically.','HDR turned off automatically.')) $Message
 }
 try {
     $template = Join-Path $root ($gameName + '.exe')
@@ -49,7 +50,8 @@ try {
         $script:now = [DateTime]::UtcNow
         $script:automatic = $false
         $script:community = $true
-        $script:hdrTray = @{Automation=(New-HdrAutomationState);Pending=$null;UpdateProcess=$null;Icon=$icon}
+        $window=[LocalHdrMenu.HdrEventWindow]::new()
+        $script:hdrTray = @{Automation=(New-HdrAutomationState);Pending=$null;UpdateProcess=$null;Icon=$icon;EventWindow=$window}
         # Start the EXE itself: no game launcher, store manifest, or store install path.
         $game = Start-Process -FilePath $executable -WorkingDirectory $directory -WindowStyle Hidden -PassThru
         Assert (@(Get-HdrRunningAppNames) -contains $gameName) 'Directly launched EXE was not enumerated'
@@ -68,19 +70,38 @@ try {
         $script:hdrTray.Automation = New-HdrAutomationState
         $script:requests.Clear()
         [IO.File]::WriteAllText((Get-HdrCustomAppsPath), ($gameName.ToUpperInvariant() + '.EXE'))
+        $config=New-HdrProfiles
+        $rule=New-HdrGameRule ($gameName+'.exe')
+        Assert ($rule.ExitDelay -eq 0) 'New game rules must default to immediate restoration'
+        if ($folder -eq 'Arbitrary games folder') { $rule.ExitDelay=1 }
+        $config.Rules=@($rule); Save-HdrProfiles $config
         Poll $off
         Assert ($requests.Count -eq 1 -and $requests[0] -eq 'On') 'Custom-only direct launch was not recognized'
+        Poll $on
+        $exitStart=$script:now
+        $window.add_GameExitCheck({
+            $script:now=$exitStart.Add($elapsed.Elapsed)
+            $script:hdrTray.Automation.LastPoll=[DateTime]::MinValue
+            Update-HdrAutomation $on
+        })
+        $elapsed=[Diagnostics.Stopwatch]::StartNew()
         $game.Kill()
         Assert ($game.WaitForExit(5000)) 'Test process did not exit'
         $game.Dispose()
         $game = $null
-        Poll $on
-        Assert ($requests.Count -eq 1) 'Exit grace period was skipped'
-        Poll $on
-        Assert ($requests.Count -eq 2 -and $requests[1] -eq 'Off') 'Direct EXE exit did not end the automatic HDR session'
+        while ($requests.Count -eq 1 -and $elapsed.ElapsedMilliseconds -lt 5000) {
+            [Windows.Forms.Application]::DoEvents()
+            Start-Sleep -Milliseconds 5
+        }
+        Assert ($requests.Count -eq 2 -and $requests[1] -eq 'Off') 'Process exit must request Off without a periodic poll'
+        Assert ($elapsed.ElapsedMilliseconds -ge 1000*$rule.ExitDelay) 'Process exit skipped the configured delay'
+        Write-Output ("Delay {0}s: simulated Off requested within {1} ms of stopping the process." -f $rule.ExitDelay,$elapsed.ElapsedMilliseconds)
+        $window.Dispose(); $window=$null
+        [IO.File]::Delete((Get-HdrProfilesPath))
     }
     'PASS: real direct-EXE launch/exit from arbitrary offline folders, community/custom matching, exclusions, and default-off behavior without storefront integration.'
 } finally {
+    if ($null -ne $window) { $window.Dispose() }
     if ($null -ne $game) {
         if (-not $game.HasExited) { $game.Kill(); [void]$game.WaitForExit(5000) }
         $game.Dispose()

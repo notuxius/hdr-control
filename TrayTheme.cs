@@ -8,6 +8,28 @@ using System.Windows.Forms;
 using Microsoft.Win32;
 
 namespace LocalHdrMenu {
+    public static class TrayUpdateBadge {
+        [DllImport("user32.dll")] static extern bool DestroyIcon(IntPtr icon);
+        public static Icon Create(Icon source) {
+            using(var bitmap=new Bitmap(source.Width,source.Height)) {
+                using(var graphics=Graphics.FromImage(bitmap)) {
+                    graphics.DrawIcon(source,new Rectangle(0,0,bitmap.Width,bitmap.Height));
+                    graphics.SmoothingMode=SmoothingMode.AntiAlias;
+                    float scale=bitmap.Width/16f;
+                    var badge=new RectangleF(bitmap.Width-7.5f*scale,0.5f*scale,7f*scale,7f*scale);
+                    using(var fill=new SolidBrush(Color.FromArgb(255,98,98)))
+                    using(var outline=new Pen(Color.FromArgb(35,35,35),scale)) {
+                        graphics.FillEllipse(fill,badge);
+                        graphics.DrawEllipse(outline,badge);
+                    }
+                }
+                IntPtr handle=bitmap.GetHicon();
+                try { using(var borrowed=Icon.FromHandle(handle)) return (Icon)borrowed.Clone(); }
+                finally { DestroyIcon(handle); }
+            }
+        }
+    }
+
     public class DialogForm : Form {
         // Shared for the helper's lifetime, including the running-app picker thread.
         public static Icon ApplicationIcon { get; set; }
@@ -108,13 +130,17 @@ namespace LocalHdrMenu {
             base.OnPaint(e);
             if(SystemInformation.HighContrast) { ControlPaint.DrawBorder(e.Graphics,ClientRectangle,SystemColors.WindowText,ButtonBorderStyle.Solid); return; }
             e.Graphics.SmoothingMode=System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
-            using(var path=DialogTheme.Round(new RectangleF(.5f,.5f,Width-1,Height-1),6))
+            using(var path=DialogTheme.ControlOutline(ClientSize,Font))
             using(var fill=new SolidBrush(DialogTheme.Surface))
             using(var pen=new Pen(ContainsFocus?DialogTheme.Accent:DialogTheme.Border)) { e.Graphics.FillPath(fill,path); e.Graphics.DrawPath(pen,path); }
         }
         public void ApplyTheme() {
             if(SystemInformation.HighContrast) return;
-            BackColor=DialogTheme.Background; Editor.BackColor=DialogTheme.Surface; Editor.ForeColor=Enabled?DialogTheme.Text:DialogTheme.Muted; Editor.BorderStyle=BorderStyle.None;
+            BackColor=DialogTheme.Surface; Editor.BackColor=DialogTheme.Surface; Editor.ForeColor=Enabled?DialogTheme.Text:DialogTheme.Muted; Editor.BorderStyle=BorderStyle.None;
+        }
+        protected override void OnPaintBackground(PaintEventArgs e) {
+            if(SystemInformation.HighContrast) base.OnPaintBackground(e);
+            else e.Graphics.Clear(Parent==null?DialogTheme.Background:Parent.BackColor);
         }
     }
     public sealed class DialogNumberInput : DialogTextInput {
@@ -139,8 +165,8 @@ namespace LocalHdrMenu {
         public void Step(int amount) { Value=Value+amount; Editor.Focus(); Editor.SelectAll(); }
         protected override void OnLayout(LayoutEventArgs e) {
             base.OnLayout(e); if(decrease==null || increase==null) return;
-            int side=ReservedWidth/2;
-            decrease.SetBounds(Width-2*side-4,4,side,Height-8); increase.SetBounds(Width-side-4,4,side,Height-8);
+            int side=ReservedWidth/2,pad=Math.Max(2,(int)Math.Round(4*Font.Size/10f)),gap=Math.Max(2,pad/2);
+            decrease.SetBounds(Width-2*side-pad,pad,side-gap,Height-2*pad); increase.SetBounds(Width-side-pad,pad,side,Height-2*pad);
         }
     }
     public static class DialogTheme {
@@ -156,6 +182,10 @@ namespace LocalHdrMenu {
             var path=new GraphicsPath(); float d=radius*2;
             path.AddArc(rect.X,rect.Y,d,d,180,90); path.AddArc(rect.Right-d,rect.Y,d,d,270,90);
             path.AddArc(rect.Right-d,rect.Bottom-d,d,d,0,90); path.AddArc(rect.X,rect.Bottom-d,d,d,90,90); path.CloseFigure(); return path;
+        }
+        internal static GraphicsPath ControlOutline(Size size,Font font) {
+            var bounds=new RectangleF(.5f,.5f,Math.Max(1,size.Width-1),Math.Max(1,size.Height-1));
+            return Round(bounds,Math.Min(7*font.Size/10f,Math.Min(bounds.Width,bounds.Height)/2));
         }
         public static Label Heading(string text,int x,int y,int width) {
             return new Label {Text=text,Bounds=new Rectangle(x,y,width,38),Font=new Font("Segoe UI Semibold",21),AutoEllipsis=true};
@@ -454,6 +484,13 @@ namespace LocalHdrMenu {
         public readonly DialogButton CheckUpdates;
         public readonly DialogCheckBox AutoCheckUpdates;
         readonly SaveStatusLabel updateStatus;
+        readonly Label lastUpdateCheck;
+        public void SetLastUpdateCheck(string utc) {
+            DateTimeOffset checkedAt;
+            lastUpdateCheck.Text=DateTimeOffset.TryParseExact(utc,"o",System.Globalization.CultureInfo.InvariantCulture,
+                System.Globalization.DateTimeStyles.None,out checkedAt)
+                ? "Last checked: "+checkedAt.ToLocalTime().ToString("g") : "Last checked: Never";
+        }
         public void SetAvailableVersion(string version) {
             updateStatus.SetIdleText(String.IsNullOrEmpty(version)?"":"Version "+version+" available");
             updateStatus.ClearFeedback();
@@ -470,7 +507,7 @@ namespace LocalHdrMenu {
             FormBorderStyle=FormBorderStyle.FixedDialog;
             int textHeight=TextRenderer.MeasureText(message,Font,new Size(512,0),TextFormatFlags.WordBreak|TextFormatFlags.NoPrefix).Height;
             bool about=!String.IsNullOrEmpty(version);
-            int statusHeight=about?28:0;
+            int statusHeight=about?56:0;
             ClientSize=new Size(560,Math.Max(220,Math.Min(600,textHeight+160+(about?100:0)+statusHeight)));
             int contentLeft=about?16:24;
             // The larger heading font adds more leading space before its first visible stroke.
@@ -487,7 +524,7 @@ namespace LocalHdrMenu {
                 column.Controls.Add(new GitHubLink { Margin=new Padding(0,8,0,0) });
                 body.Controls.Add(column);
             } else body.Controls.Add(MessageText);
-            int buttonRow=about?1:0;
+            int buttonRow=about?2:0;
             var footer=new TableLayoutPanel {Dock=DockStyle.Bottom,Height=72+statusHeight,Padding=new Padding(16),RowCount=buttonRow+1};
             DialogResult[] results;
             switch(buttons) {
@@ -502,8 +539,15 @@ namespace LocalHdrMenu {
             if(about) {
                 footer.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
                 footer.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-                updateStatus=new SaveStatusLabel { Name="UpdateStatus", Size=new Size(180,statusHeight), TextAlign=ContentAlignment.MiddleLeft, Margin=Padding.Empty };
+                footer.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+                updateStatus=new SaveStatusLabel { Name="UpdateStatus", Dock=DockStyle.Fill, Size=new Size(180,28),
+                    TextAlign=ContentAlignment.MiddleLeft, Margin=Padding.Empty };
                 footer.Controls.Add(updateStatus,0,0);
+                footer.SetColumnSpan(updateStatus,footer.ColumnCount);
+                lastUpdateCheck=new Label { Name="LastUpdateCheck", Text="Last checked: Never", Dock=DockStyle.Fill, Size=new Size(180,28),
+                    TextAlign=ContentAlignment.MiddleLeft, AutoEllipsis=true, UseMnemonic=false, Margin=Padding.Empty };
+                footer.Controls.Add(lastUpdateCheck,0,1);
+                footer.SetColumnSpan(lastUpdateCheck,footer.ColumnCount);
                 CheckUpdates=new DialogButton { Text="Check for updates", Size=new Size(180,36), Margin=Padding.Empty };
                 footer.Controls.Add(CheckUpdates,0,buttonRow);
                 AutoCheckUpdates=new DialogCheckBox { Text="Check daily for updates", Dock=DockStyle.Fill, Margin=new Padding(8,0,0,0) };
@@ -642,24 +686,74 @@ namespace LocalHdrMenu {
         [DllImport("user32.dll")] static extern bool GetWindowRect(IntPtr handle,out NativeRect rect);
         [DllImport("user32.dll")] static extern bool InvalidateRect(IntPtr window,IntPtr rect,bool erase);
         sealed class PopupFrame : NativeWindow {
-            protected override void WndProc(ref Message m) {
-                base.WndProc(ref m);
-                if(SystemInformation.HighContrast || (m.Msg!=0x85 && m.Msg!=0xf && m.Msg!=0x14)) return;
+            [DllImport("user32.dll")] static extern int GetWindowLong(IntPtr window,int index);
+            [DllImport("user32.dll")] static extern int SetWindowLong(IntPtr window,int index,int value);
+            [DllImport("user32.dll")] static extern bool SetWindowPos(IntPtr window,IntPtr after,int x,int y,int width,int height,uint flags);
+            [DllImport("user32.dll")] static extern int SetWindowRgn(IntPtr window,IntPtr region,bool redraw);
+            [DllImport("gdi32.dll")] static extern bool DeleteObject(IntPtr handle);
+            [DllImport("uxtheme.dll",CharSet=CharSet.Unicode)] static extern int SetWindowTheme(IntPtr window,string application,string classes);
+            readonly DialogComboBox owner;
+            Size roundedSize;
+            float roundedFontSize;
+            internal PopupFrame(DialogComboBox owner) { this.owner=owner; }
+            internal void Attach(IntPtr window) {
+                if(Handle==window) return;
+                if(Handle!=IntPtr.Zero) ReleaseHandle();
+                AssignHandle(window); roundedSize=Size.Empty;
+                if(SystemInformation.HighContrast) return;
+                // Remove the native light frame before the first animation or
+                // paint, rather than covering it after it has reached the screen.
+                SetWindowLong(Handle,-16,GetWindowLong(Handle,-16)&~0x00800000); // WS_BORDER
+                SetWindowLong(Handle,-20,GetWindowLong(Handle,-20)&~0x00000200); // WS_EX_CLIENTEDGE
+                SetWindowTheme(Handle,"DarkMode_Explorer",null);
+                DialogForm.DisableWindowTransitions(Handle);
+                SetWindowPos(Handle,IntPtr.Zero,0,0,0,0,0x0037); // FRAMECHANGED, no move/size/activate/z-order
+            }
+            void UpdateShape() {
                 NativeRect rect;
                 if(!GetWindowRect(Handle,out rect)) return;
+                var size=new Size(rect.Right-rect.Left,rect.Bottom-rect.Top);
+                if(size.Width<2 || size.Height<2 || (size==roundedSize && owner.Font.Size==roundedFontSize)) return;
+                roundedSize=size; roundedFontSize=owner.Font.Size;
+                using(var g=Graphics.FromHwnd(Handle))
+                using(var path=DialogTheme.ControlOutline(size,owner.Font))
+                using(var region=new Region(path)) {
+                    IntPtr native=region.GetHrgn(g);
+                    // Windows owns the region only when SetWindowRgn succeeds.
+                    if(SetWindowRgn(Handle,native,true)==0) DeleteObject(native);
+                }
+            }
+            void PaintFrame(IntPtr dc) {
+                NativeRect rect;
+                if(dc==IntPtr.Zero || !GetWindowRect(Handle,out rect)) return;
+                using(var g=Graphics.FromHdc(dc))
+                using(var path=DialogTheme.ControlOutline(new Size(rect.Right-rect.Left,rect.Bottom-rect.Top),owner.Font))
+                using(var pen=new Pen(DialogTheme.Border)) {
+                    g.SmoothingMode=SmoothingMode.AntiAlias; g.DrawPath(pen,path);
+                }
+            }
+            protected override void WndProc(ref Message m) {
+                if(SystemInformation.HighContrast) { base.WndProc(ref m); return; }
+                if(m.Msg==0x14 && m.WParam!=IntPtr.Zero) { // WM_ERASEBKGND, including animation buffers
+                    using(var g=Graphics.FromHdc(m.WParam)) g.Clear(DialogTheme.Surface);
+                    m.Result=(IntPtr)1; return;
+                }
+                base.WndProc(ref m);
+                if(m.Msg==0x47) UpdateShape(); // WM_WINDOWPOSCHANGED, before the popup becomes visible
+                if(m.Msg==0x317 && m.WParam!=IntPtr.Zero) { PaintFrame(m.WParam); return; } // WM_PRINT
+                if(m.Msg!=0x85 && m.Msg!=0xf) return;
                 IntPtr dc=GetWindowDC(Handle); if(dc==IntPtr.Zero) return;
-                try { using(var g=Graphics.FromHdc(dc)) using(var pen=new Pen(DialogTheme.Border,2))
-                    g.DrawRectangle(pen,1,1,rect.Right-rect.Left-2,rect.Bottom-rect.Top-2);
-                } finally { ReleaseDC(Handle,dc); }
+                try { PaintFrame(dc); } finally { ReleaseDC(Handle,dc); }
             }
         }
-        readonly PopupFrame popup=new PopupFrame();
+        readonly PopupFrame popup;
         bool hovering;
         int? popupSelection;
         // The native list temporarily reports the hovered row as SelectedIndex
         // without raising a selection change.
         internal int ValueIndex { get { return popupSelection ?? SelectedIndex; } }
         public DialogComboBox() {
+            popup=new PopupFrame(this);
             SetStyle(ControlStyles.UserPaint|ControlStyles.AllPaintingInWmPaint|ControlStyles.OptimizedDoubleBuffer,!SystemInformation.HighContrast);
             DropDownStyle=ComboBoxStyle.DropDownList; DrawMode=DrawMode.OwnerDrawFixed;
             FlatStyle=FlatStyle.Flat; MaxDropDownItems=10; IntegralHeight=true;
@@ -667,6 +761,11 @@ namespace LocalHdrMenu {
             UpdateMetrics();
         }
         int Px(float value) { return (int)Math.Round(value*Font.Size/10f); }
+        void AttachPopup() {
+            var info=new ComboInfo {Size=Marshal.SizeOf(typeof(ComboInfo))};
+            if(popup!=null && GetComboBoxInfo(Handle,ref info) && info.List!=IntPtr.Zero) popup.Attach(info.List);
+        }
+        protected override void OnHandleCreated(EventArgs e) { base.OnHandleCreated(e); AttachPopup(); }
         void UpdateMetrics() { ItemHeight=Math.Max(Font.Height+8,Px(30)); }
         protected override void OnFontChanged(EventArgs e) { base.OnFontChanged(e); UpdateMetrics(); }
         protected override void OnMouseEnter(EventArgs e) { hovering=true; Invalidate(); base.OnMouseEnter(e); }
@@ -683,10 +782,7 @@ namespace LocalHdrMenu {
         }
         protected override void OnDropDown(EventArgs e) {
             popupSelection=SelectedIndex;
-            var info=new ComboInfo {Size=Marshal.SizeOf(typeof(ComboInfo))};
-            if(GetComboBoxInfo(Handle,ref info) && info.List!=IntPtr.Zero && popup.Handle!=info.List) {
-                if(popup.Handle!=IntPtr.Zero) popup.ReleaseHandle(); popup.AssignHandle(info.List);
-            }
+            AttachPopup();
             base.OnDropDown(e); Invalidate();
         }
         protected override void OnDropDownClosed(EventArgs e) { popupSelection=null; base.OnDropDownClosed(e); Invalidate(); }
@@ -724,7 +820,7 @@ namespace LocalHdrMenu {
             using(var background=new SolidBrush(Parent==null?DialogTheme.Background:Parent.BackColor)) g.FillRectangle(background,ClientRectangle);
             g.SmoothingMode=SmoothingMode.AntiAlias;
             Color edge=Enabled && (Focused || DroppedDown)?DialogTheme.Accent:hovering && Enabled?DialogTheme.Muted:DialogTheme.Border;
-            using(var path=DialogTheme.Round(new RectangleF(1,1,Width-3,Height-3),Px(7)))
+            using(var path=DialogTheme.ControlOutline(ClientSize,Font))
             using(var fill=new SolidBrush(DialogTheme.Surface)) using(var pen=new Pen(edge)) { g.FillPath(fill,path); g.DrawPath(pen,path); }
             var bounds=new Rectangle(Px(12),0,Math.Max(0,Width-Px(48)),Height);
             int index=ValueIndex;
@@ -765,7 +861,7 @@ namespace LocalHdrMenu {
             else if(!Primary || AccessibleRole!=AccessibleRole.PageTab) {
                 if(pressed) fill=ControlPaint.Dark(fill,.12f); else if(hovering) fill=ControlPaint.Light(fill,.12f);
             }
-            using(var path=DialogTheme.Round(new RectangleF(1,1,Width-3,Height-3),7*Font.Size/10))
+            using(var path=DialogTheme.ControlOutline(ClientSize,Font))
             using(var brush=new SolidBrush(fill)) using(var pen=new Pen(Focused?DialogTheme.Accent:DialogTheme.Border)) {
                 e.Graphics.FillPath(brush,path); if(!Primary || Focused) e.Graphics.DrawPath(pen,path);
             }
@@ -1695,7 +1791,7 @@ namespace LocalHdrMenu {
             var fill=SystemInformation.HighContrast?SystemColors.Window:DialogTheme.Background;
             Editor.BackColor=fill;
             Editor.ForeColor=SystemInformation.HighContrast?SystemColors.WindowText:Enabled?DialogTheme.Text:DialogTheme.Muted;
-            using(var shape=DialogTheme.Round(new RectangleF(1,1,Width-3,Height-3),8*Font.Size/10f))
+            using(var shape=DialogTheme.ControlOutline(ClientSize,Font))
             using(var brush=new SolidBrush(fill))
             using(var pen=new Pen(SystemInformation.HighContrast?SystemColors.WindowText:ContainsFocus?DialogTheme.Accent:DialogTheme.Border)) {
                 e.Graphics.FillPath(brush,shape); e.Graphics.DrawPath(pen,shape);

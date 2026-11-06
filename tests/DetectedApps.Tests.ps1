@@ -31,7 +31,7 @@ $script:automatic = $false
 $script:community = $true
 $panel = $null
 try {
-    [IO.File]::WriteAllLines((Get-HdrCustomAppsPath), @('CustomOnly.exe','!Excluded.exe'))
+    [IO.File]::WriteAllLines((Get-HdrCustomAppsPath), @('CustomOnly.exe','!Excluded.exe','Absent.exe'))
     Poll
     Assert (-not [IO.File]::Exists((Get-HdrDetectedAppsPath))) 'Disabled automation recorded history'
     Assert ($requests.Count -eq 0) 'Disabled automation changed HDR'
@@ -55,13 +55,13 @@ try {
     $script:hdrTray.InstalledApps['neverlaunched'] = $true
     Assert ($rows.Count -eq 5) 'Rows must be deduplicated across lists'
     Assert (@($rows | Where-Object Section -eq 'Auto-detected').Count -eq 2) 'Detected section missing'
-    Assert (@($rows | Where-Object Section -eq 'Installed').Count -eq 1) 'Unseen defaults are misclassified'
-    Assert (@($rows | Where-Object Section -eq 'Custom').Count -eq 2) 'Custom entries and exclusions missing'
+    Assert (($rows | Where-Object Executable -eq 'Excluded.exe').Section -eq 'Installed') 'An excluded community game moved to Custom'
+    Assert (($rows | Where-Object Section -eq 'Custom').Executable -eq 'customonly.exe') 'Custom must contain only the personal game'
     $panel = [LocalHdrMenu.GameListsForm]::new()
     $script:hdrTray.SettingsWindow = $panel
     Update-HdrGameListsPanel
     $tabs = @($panel.Controls | Where-Object { $_ -is [LocalHdrMenu.DialogTabs] })[0]
-    Assert ($tabs.TabPages[0].Text -eq 'Auto-detected (2/2)' -and $tabs.TabPages[1].Text -eq 'Installed (1/1)' -and $tabs.TabPages[2].Text -eq 'Custom (1/2)') 'Window sections/counts differ from saved records'
+    Assert ($tabs.TabPages[0].Text -eq 'Auto-detected (2/2)' -and $tabs.TabPages[1].Text -eq 'Installed (1/2)' -and $tabs.TabPages[2].Text -eq 'Custom (1/1)') 'Window sections/counts differ from saved records'
     # A later custom exclusion must override existing detection history.
     [IO.File]::AppendAllText((Get-HdrCustomAppsPath), "`r`n!KnownOne.exe")
     Assert (-not (Get-HdrWatchedApps).ContainsKey('knownone')) 'History bypassed exclusion'

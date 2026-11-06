@@ -46,6 +46,8 @@ $script:syncCount=0
 $script:hdrUpdateSettingsKey='HKEY_CURRENT_USER\Software\HdrControlTrayTest-'+[Guid]::NewGuid().ToString('N')
 $savedNextCheck = [DateTimeOffset]::UtcNow.AddHours(1).ToUnixTimeSeconds()
 [Microsoft.Win32.Registry]::SetValue($script:hdrUpdateSettingsKey,'NextUpdateCheck',$savedNextCheck,[Microsoft.Win32.RegistryValueKind]::QWord)
+$savedLastCheck = [DateTimeOffset]::UtcNow.AddDays(-1)
+[Microsoft.Win32.Registry]::SetValue($script:hdrUpdateSettingsKey,'LastUpdateCheckUtc',$savedLastCheck.ToString('o'))
 Initialize-HdrTray
 $hdrProtocolPath='Registry::'+$script:hdrUpdateSettingsKey+'\Protocol'
 try {
@@ -68,6 +70,7 @@ try {
     Assert ($script:testStartup -and $script:hdrTray.Startup.Checked) 'Startup toggle should save enabled'
     Assert ($null -eq $script:lastNotification) 'Successful startup registration should leave the notification to Windows'
     $about=$script:hdrTray.AboutWindow
+    Assert ($about.Controls.Find('LastUpdateCheck',$true)[0].Text -eq ('Last checked: '+$savedLastCheck.ToLocalTime().ToString('g'))) 'About must restore the last successful update check across restarts'
     $clickUpdate=[EventHandler]{ $this.CheckUpdates.PerformClick(); $this.AcceptButton.PerformClick() }
     $about.add_Shown($clickUpdate)
     $script:hdrTray.About.PerformClick()
@@ -104,7 +107,13 @@ try {
         $script:hdrTray.UpdateCheck = [pscustomobject]@{Finished=$true;Result=$result;NoRelease=($case -eq 'none');Error=$(if ($case -eq 'offline') {'offline'} else {$null})}
         $script:hdrTray.CheckUpdates.Enabled = $false
         $script:lastNotification=$null
+        [Microsoft.Win32.Registry]::SetValue($script:hdrUpdateSettingsKey,'LastUpdateCheckUtc',$savedLastCheck.ToString('o'))
         Complete-HdrUpdateCheck
+        $lastCheck=[string][Microsoft.Win32.Registry]::GetValue($script:hdrUpdateSettingsKey,'LastUpdateCheckUtc','')
+        if ($case -in 'current','newer','older','none') {
+            Assert ([Math]::Abs(([DateTimeOffset]::Parse($lastCheck)-[DateTimeOffset]::UtcNow).TotalSeconds) -lt 5) 'A successful check must save its completion time'
+            Assert ($about.Controls.Find('LastUpdateCheck',$true)[0].Text -eq ('Last checked: '+[DateTimeOffset]::Parse($lastCheck).ToLocalTime().ToString('g'))) 'A completed check must refresh the visible timestamp'
+        } else { Assert ($lastCheck -eq $savedLastCheck.ToString('o')) 'A failed or invalid check must preserve the last successful timestamp' }
         Assert ($null -eq $script:hdrTray.UpdateCheck -and $script:hdrTray.CheckUpdates.Enabled) 'Update check must restore the About button'
         $expected = switch ($case) { 'current' {'latest version'} 'older' {'latest version'} 'newer' {'newer version is available: 1.10.0'} 'none' {'No newer version'} default {'Could not check'} }
         if ($case -eq 'newer') { Assert ($script:lastNotification -match $expected -and $script:notifyVersion -eq '1.10.0' -and -not $script:opensAbout) 'Available-update notification must offer installation' }
@@ -147,6 +156,36 @@ try {
     & $script:sendRealNotification "Test update available`nClick to install the update." -InstallVersion '1.1.0'
     Assert (-not $script:toastXml.DocumentElement.HasAttribute('launch') -and $script:toastXml.SelectSingleNode('//text[last()]').InnerText -eq 'Open About and select Install update.') 'Unavailable protocol must fall back to About instructions'
     Assert ($null -eq $script:requestedUri) 'Updating must not open a browser'
+    # A known update survives HDR changes, failed checks, and helper restarts.
+    Set-HdrAvailableUpdate '1.1.0'
+    foreach ($automatic in @($false,$true)) {
+        $script:testAutomatic=$automatic
+        foreach ($display in @((Display 'Primary' $true $true),(Display 'Primary' $true $false),(Display 'Primary' $false $false))) {
+            Set-HdrTrayState (Get-HdrTrayState @($display))
+            Assert ($script:hdrTray.Icon.Icon.Handle -ne $script:hdrTray.BaseIcon.Handle) 'Available update must badge every HDR state'
+            Assert ($script:hdrTray.Icon.Text -match 'Update available: v1.1.0' -and $script:hdrTray.Icon.Text.Length -le 63) 'Badge tooltip must identify the release'
+            $badgeHandle=$script:hdrTray.Icon.Icon.Handle
+            Set-HdrTrayState (Get-HdrTrayState @($display))
+            Assert ($script:hdrTray.Icon.Icon.Handle -eq $badgeHandle) 'Repeated refresh must reuse the badge icon'
+        }
+    }
+    $script:testAutomatic=$false
+    Assert ($script:hdrTray.UpdateIcons.Count -eq 5) 'Badge cache must be bounded by the five base icons'
+    $script:hdrTray.AvailableVersion=$null
+    Restore-HdrAvailableUpdate
+    Assert ($script:hdrTray.AvailableVersion -eq '1.1.0' -and $script:hdrTray.Menu.Items.Contains($script:hdrTray.UpdateAvailable)) 'Restart must restore the update badge and menu entry'
+    $script:hdrTray.UpdateCheck=[pscustomobject]@{Finished=$true;Error='offline'}
+    $script:hdrTray.AutomaticUpdateCheck=$true
+    Complete-HdrUpdateCheck
+    Assert ($script:hdrTray.AvailableVersion -eq '1.1.0' -and $script:hdrTray.Icon.Icon.Handle -ne $script:hdrTray.BaseIcon.Handle) 'A failed recheck must preserve a known update'
+    $script:hdrTray.AutomaticUpdateCheck=$false
+    foreach ($cached in @('1.0.0','0.9.0','invalid')) {
+        [Microsoft.Win32.Registry]::SetValue($script:hdrUpdateSettingsKey,'AvailableUpdateVersion',$cached)
+        Restore-HdrAvailableUpdate
+        Assert (-not $script:hdrTray.AvailableVersion -and -not $script:hdrTray.Menu.Items.Contains($script:hdrTray.UpdateAvailable)) 'Installed or invalid cached updates must clear the badge'
+        Assert ($script:hdrTray.Icon.Icon.Handle -eq $script:hdrTray.BaseIcon.Handle -and $script:hdrTray.Icon.Text -notmatch 'Update available') 'Clearing an update must restore the original icon and tooltip'
+    }
+    $script:lastMessage=$null
     $script:messageResponse = [Windows.Forms.DialogResult]::No
     Assert ($script:hdrTray.Menu.ShowActionIcons) 'Right-click menu icons are missing'
     foreach ($popup in @($script:hdrTray.ControlsMenu,$script:hdrTray.Menu,$script:hdrTray.Displays.DropDown)) {
@@ -488,6 +527,7 @@ try {
     } finally { $script:hdrTray.Pending=$null }
     $script:launches=0
     try {
+        Set-HdrAvailableUpdate '1.1.0'
         & $script:realStartAppUpdate '1.1.0'
         Assert ($script:launchArguments -match 'Update-HdrApp.ps1" -Version 1.1.0$') 'Accepted update must launch the installed updater directly'
         Assert (-not $script:hdrTray.CheckUpdates.Enabled -and $script:hdrTray.CheckUpdates.Text -eq 'Updating...') 'Update progress is missing'
