@@ -201,6 +201,7 @@ function Update-HdrPolicy($Displays) {
     foreach ($key in $matches.Keys) {
         if (-not $state.Sessions.ContainsKey($key)) { $state.Sessions[$key]=@{First=$now;EmptySince=$null;Started=$false;Notified=$false;Rule=$matches[$key]} }
         $state.Sessions[$key].EmptySince=$null; $state.Sessions[$key].Rule=$matches[$key]
+        $state.Sessions[$key].Exited=$false
         if ($running.ContainsKey($key)) { $state.Sessions[$key].SeenRunning=$true }
     }
     $nextExit=[DateTime]::MaxValue
@@ -209,8 +210,8 @@ function Update-HdrPolicy($Displays) {
         if (-not $matches.ContainsKey($key)) {
             if ($null -eq $s.EmptySince) { $s.EmptySince=$now }
             $deadline=$s.EmptySince.AddSeconds($s.Rule.ExitDelay)
+            $s.Exited=$s.SeenRunning -and -not $running.ContainsKey($key)
             if ($now -ge $deadline) {
-                $s.Exited=$s.SeenRunning -and -not $running.ContainsKey($key)
                 $state.Sessions.Remove($key)
             } elseif ($deadline -lt $nextExit) { $nextExit=$deadline }
         }

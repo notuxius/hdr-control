@@ -54,7 +54,7 @@ try {
     New-Item -ItemType Directory -Path $legacyStage -Force | Out-Null
     Copy-Item -LiteralPath $good -Destination (Join-Path $legacyRoot 'update.zip')
     foreach ($name in Get-HdrPackageFiles) {
-        if ($name -notin @('HdrAutoEnabled.ico','HdrEnabledPaused.ico','HdrAutoIdle.ico','HdrApps.community.txt','HdrProfiles.ps1','ProfilesUi.cs','ProcessGridTheme.cs','HdrLocation.cs')) { Copy-Item -LiteralPath (Join-Path $staged $name) -Destination $legacyStage }
+        if ($name -notin @('HdrAutoEnabled.ico','HdrAutoExit.ico','HdrEnabledPaused.ico','HdrAutoIdle.ico','HdrApps.community.txt','HdrProfiles.ps1','ProfilesUi.cs','ProcessGridTheme.cs','HdrLocation.cs')) { Copy-Item -LiteralPath (Join-Path $staged $name) -Destination $legacyStage }
     }
     Restore-HdrCommunityBundle $legacyStage
     Assert ((Get-FileHash (Join-Path $legacyStage 'HdrAutoEnabled.ico')).Hash -eq (Get-FileHash (Join-Path $repo 'HdrAutoEnabled.ico')).Hash) 'Legacy updater did not recover the auto-enabled tray icon'

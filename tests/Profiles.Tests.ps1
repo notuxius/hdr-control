@@ -67,9 +67,12 @@ try {
     Assert ((Get-HdrTrayState @($b)).IconState -eq 'Enabled') 'A disconnected auto-enabled monitor must not claim ownership of another display'
     $script:running=@(); Poll
     Assert ($calls.Count -eq 1) 'Exit grace period was skipped'
+    Assert ((Get-HdrTrayState $displays).IconState -eq 'AutoExit') 'Exit delay should reverse the play button'
     Poll
     Assert ($calls.Count -eq 2 -and $calls[1].Action -eq 'Off') 'Restore must undo HDR enabled by automation'
+    Assert ((Get-HdrTrayState $displays).IconState -eq 'AutoExit') 'The exit arrow should remain during the off command'
     Finish; Poll
+    Assert ((Get-HdrTrayState $displays).IconState -ne 'AutoExit') 'The exit arrow must clear once the display is off'
     Assert ($b.HdrEnabled -and -not $hdrTray.Automation.Active) 'Unselected monitor or session cleanup incorrect'
 
     Reset
@@ -101,6 +104,7 @@ try {
     Poll; Finish; $script:running=@('game','second'); Poll
     $script:running=@('second'); Poll; Poll; Poll; Poll
     Assert ($calls.Count -eq 1) 'Overlapping game must keep HDR enabled'
+    Assert ((Get-HdrTrayState $displays).IconState -eq 'AutoEnabled') 'A running second game must retain the forward arrow'
     $script:running=@(); Poll; Poll
     Assert ($calls.Count -eq 2) 'Last game must release display'
     Finish $false; Poll
@@ -115,6 +119,7 @@ try {
     Assert ($notifications.Count -eq 1) 'Exit delay must not send an advance notification'
     $script:running=@('game'); Poll
     Assert ($calls.Count -eq 1) 'Restarting during the delay must cancel shutdown'
+    Assert ((Get-HdrTrayState $displays).IconState -eq 'AutoEnabled') 'Restarting the game must restore the forward arrow'
     $script:running=@(); Poll
     Assert ($notifications.Count -eq 1) 'Exiting again after a restart must stay quiet during the delay'
 
@@ -123,6 +128,7 @@ try {
     $rule=AddRule 'game.exe' @((Get-HdrBrightnessKey $a)) 'Restore'
     $script:running=@('game'); Poll; $script:running=@(); Poll; Poll
     Assert ($notifications.Count -eq 0) 'Restoring already-enabled HDR must not warn about turning it off'
+    Assert ((Get-HdrTrayState $displays).IconState -eq 'Enabled') 'Restoring pre-existing HDR must keep the normal icon'
 
     Reset
     $rule=AddRule 'game.exe' @((Get-HdrBrightnessKey $a))

@@ -931,11 +931,18 @@ function Get-HdrTrayState($Displays) {
     $enabledDisplays = @($capable | Where-Object HdrEnabled)
     $enabled = $enabledDisplays.Count
     $autoEnabled = $false
+    $exitPending = $false
     foreach ($display in $enabledDisplays) {
         if (-not $script:hdrTray.Automation.Displays.Count) { break }
         $entry = $script:hdrTray.Automation.Displays[(Get-HdrMonitorKey $display)]
-        if ($entry.Owned -and $entry.Expected -and -not $entry.Released -and $entry.DisplayId -ceq $display.DisplayId) {
-            $autoEnabled = $true
+        if ($entry.Released -or $entry.DisplayId -cne $display.DisplayId) { continue }
+        if ($entry.Owned -and $entry.Expected) { $autoEnabled = $true }
+        # Each monitor can be held by several games. Reverse the arrow only
+        # when its last games exited and the exit policy will return it to SDR.
+        $willDisable = $entry.ExitPolicy -eq 'Sdr' -or ($entry.Owned -and -not $entry.Before)
+        if ($willDisable -and -not $script:hdrTray.Automation.ReadWarning -and $entry.LastSessions.Count -and
+            -not @($entry.LastSessions | Where-Object { -not $_.Exited }).Count) {
+            $exitPending = $true
             break
         }
     }
@@ -946,7 +953,7 @@ function Get-HdrTrayState($Displays) {
     $enableNext = $enabled -lt $capable.Count
     [pscustomobject]@{
         Status = $status
-        IconState = if ($autoEnabled) { 'AutoEnabled' } elseif ($enabled) { 'Enabled' } elseif ($capable.Count) { 'Disabled' } else { 'Unavailable' }
+        IconState = if ($exitPending) { 'AutoExit' } elseif ($autoEnabled) { 'AutoEnabled' } elseif ($enabled) { 'Enabled' } elseif ($capable.Count) { 'Disabled' } else { 'Unavailable' }
         Command = if ($enableNext) { 'Enable HDR' } else { 'Disable HDR' }
         Action = if ($enableNext) { 'On' } else { 'Off' }
         Available = $capable.Count -gt 0
@@ -1011,6 +1018,7 @@ function Set-HdrTrayState($State) {
     $automatic = Get-HdrAutomationPreference 'AutomaticHdr'
     Set-HdrAutomaticMenuState $automatic
     $script:hdrTray.BaseIcon = switch ($State.IconState) {
+        'AutoExit' { $script:hdrTray.AutoExitIcon }
         { $_ -in 'Enabled','AutoEnabled' } { if ($automatic) { $script:hdrTray.AutoEnabledIcon } else { $script:hdrTray.EnabledIcon } }
         'Disabled' { if ($automatic) { $script:hdrTray.AutoIdleIcon } else { $script:hdrTray.DisabledIcon } }
         default { $script:hdrTray.UnavailableIcon }
@@ -1143,7 +1151,6 @@ function Update-HdrTray([switch]$NotifyRefresh) {
             $profiles=Read-HdrProfiles
             foreach ($d in $displays) { $d.Name=Get-HdrMonitorName $d $profiles }
         } catch { Write-HdrDiagnostic 'SETTINGS' $_.Exception.Message }
-        Set-HdrTrayState (Get-HdrTrayState $displays)
         # A transient file/registry failure must not stop the tray or its timer.
         try { Sync-HdrMenu $displays } catch { }
         Receive-HdrLaunchRequests
@@ -1151,6 +1158,7 @@ function Update-HdrTray([switch]$NotifyRefresh) {
         Update-HdrAutomation $displays
         Update-HdrLaunches $displays
         Update-HdrBrightness $displays
+        Set-HdrTrayState (Get-HdrTrayState $displays)
     } catch {
         $script:hdrTray.DisplayReadError=$_.Exception.Message
         Write-HdrDiagnostic 'DISPLAY' $_.Exception.Message
@@ -1443,6 +1451,7 @@ function Initialize-HdrTray {
         Timer = New-Object Windows.Forms.Timer
         EnabledIcon = [Drawing.Icon]::new((Join-Path $PSScriptRoot 'HdrEnabledPaused.ico'), [Windows.Forms.SystemInformation]::SmallIconSize)
         AutoEnabledIcon = [Drawing.Icon]::new((Join-Path $PSScriptRoot 'HdrAutoEnabled.ico'), [Windows.Forms.SystemInformation]::SmallIconSize)
+        AutoExitIcon = [Drawing.Icon]::new((Join-Path $PSScriptRoot 'HdrAutoExit.ico'), [Windows.Forms.SystemInformation]::SmallIconSize)
         AutoIdleIcon = [Drawing.Icon]::new((Join-Path $PSScriptRoot 'HdrAutoIdle.ico'), [Windows.Forms.SystemInformation]::SmallIconSize)
         DisabledIcon = [Drawing.Icon]::new((Join-Path $PSScriptRoot 'HdrDisabled.ico'), [Windows.Forms.SystemInformation]::SmallIconSize)
         UnavailableIcon = [Drawing.Icon]::new((Join-Path $PSScriptRoot 'HdrUnavailable.ico'), [Windows.Forms.SystemInformation]::SmallIconSize)
@@ -1597,6 +1606,7 @@ function Close-HdrTray {
     $script:hdrTray.ControlsMenu.Dispose()
     $script:hdrTray.EnabledIcon.Dispose()
     $script:hdrTray.AutoEnabledIcon.Dispose()
+    $script:hdrTray.AutoExitIcon.Dispose()
     $script:hdrTray.AutoIdleIcon.Dispose()
     $script:hdrTray.DisabledIcon.Dispose()
     $script:hdrTray.UnavailableIcon.Dispose()

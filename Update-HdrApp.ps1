@@ -9,7 +9,7 @@ function ConvertTo-HdrVersion([string]$Value) {
 
 function Get-HdrPackageFiles {
     return @('Setup.ps1','HdrSdrMenu.ps1','HdrTray.ps1','HdrProfiles.ps1','HdrStartup.ps1','ProfilesUi.cs','ProcessGridTheme.cs','TrayTheme.cs','HdrLocation.cs','Start-Tray.vbs','Toggle-HdrSdr.vbs',
-        'Update-HdrApp.ps1','HdrApps.community.txt','VERSION','HdrSdrMenu.ico','HdrEnabled.ico','HdrAutoEnabled.ico','HdrEnabledPaused.ico','HdrAutoIdle.ico','HdrDisabled.ico','HdrUnavailable.ico',
+        'Update-HdrApp.ps1','HdrApps.community.txt','VERSION','HdrSdrMenu.ico','HdrEnabled.ico','HdrAutoEnabled.ico','HdrAutoExit.ico','HdrEnabledPaused.ico','HdrAutoIdle.ico','HdrDisabled.ico','HdrUnavailable.ico',
         'HdrEnableAction.ico','HdrDisableAction.ico','HdrUnavailableAction.ico','hdr-context-menu.nss')
 }
 
@@ -63,7 +63,7 @@ function Receive-HdrUpdate([string]$ReleaseVersion, [string]$Archive) {
 }
 
 function Restore-HdrCommunityBundle([string]$Source) {
-    $newFiles=@('HdrAutoEnabled.ico','HdrEnabledPaused.ico','HdrAutoIdle.ico','HdrApps.community.txt','HdrProfiles.ps1','HdrStartup.ps1','ProfilesUi.cs','ProcessGridTheme.cs','HdrLocation.cs')
+    $newFiles=@('HdrAutoEnabled.ico','HdrAutoExit.ico','HdrEnabledPaused.ico','HdrAutoIdle.ico','HdrApps.community.txt','HdrProfiles.ps1','HdrStartup.ps1','ProfilesUi.cs','ProcessGridTheme.cs','HdrLocation.cs')
     $missing=@($newFiles | Where-Object { -not (Test-Path -LiteralPath (Join-Path $Source $_) -PathType Leaf) })
     if (-not $missing.Count) { return }
     # Older updaters stage only their known runtime files. Recover new modules

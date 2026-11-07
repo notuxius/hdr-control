@@ -1,6 +1,6 @@
 # HDR Control
 
-Current version: **1.6.0**.
+Current version: **1.6.1**.
 
 Control HDR, automate switching, and adjust SDR brightness on Windows. Formerly **HDR Context Menu**.
 
@@ -15,6 +15,8 @@ The label follows changes made through Windows Settings, Win+Alt+B, or other app
 ## Tray icon
 
 The same helper also shows an HDR icon in the notification area (it may initially appear inside the hidden-icons arrow). Hover over it for current status.
+
+When the last game using a display exits and HDR Control is about to turn HDR off, the green play arrow points left. It stays left during the exit delay and while Windows switches the display. Reopening the game during the delay restores the right-facing arrow. Once HDR is off, the icon turns yellow.
 
 The system tray icon is **green** when HDR is on and **yellow** when HDR is off. In both states, the lower-right badge shows **play** when automatic HDR switching is on and **pause** when it is off. Hovering over the icon shows **HDR Control -** followed by the left-click menu status, for example **HDR Control - HDR: Enabled · Auto: Idle**. A **red X** means HDR is unavailable or cannot be read. With mixed displays, the icon is green and the tooltip and menu show **HDR: Mixed**.
 

@@ -121,7 +121,7 @@ try {
             Remove-Item -LiteralPath $importFile
         }
         if (Test-Path -LiteralPath $menuKey) { Remove-Item -LiteralPath $menuKey -Recurse }
-        foreach ($name in @('HdrSdrMenu.ps1','HdrTray.ps1','HdrProfiles.ps1','HdrStartup.ps1','ProfilesUi.cs','ProcessGridTheme.cs','TrayTheme.cs','HdrLocation.cs','Update-HdrApp.ps1','HdrApps.community.txt','VERSION','Start-Tray.vbs','Toggle-HdrSdr.vbs','HdrSdrMenu.ico','HdrEnabled.ico','HdrAutoEnabled.ico','HdrEnabledPaused.ico','HdrAutoIdle.ico','HdrDisabled.ico','HdrUnavailable.ico','HdrEnableAction.ico','HdrDisableAction.ico','HdrUnavailableAction.ico','MenuLabel.txt','MenuIcon.txt','Setup.ps1','hdr-context-menu.nss','package.commit')) {
+        foreach ($name in @('HdrSdrMenu.ps1','HdrTray.ps1','HdrProfiles.ps1','HdrStartup.ps1','ProfilesUi.cs','ProcessGridTheme.cs','TrayTheme.cs','HdrLocation.cs','Update-HdrApp.ps1','HdrApps.community.txt','VERSION','Start-Tray.vbs','Toggle-HdrSdr.vbs','HdrSdrMenu.ico','HdrEnabled.ico','HdrAutoEnabled.ico','HdrAutoExit.ico','HdrEnabledPaused.ico','HdrAutoIdle.ico','HdrDisabled.ico','HdrUnavailable.ico','HdrEnableAction.ico','HdrDisableAction.ico','HdrUnavailableAction.ico','MenuLabel.txt','MenuIcon.txt','Setup.ps1','hdr-context-menu.nss','package.commit')) {
             $path = Join-Path $installDir $name
             if (Test-Path -LiteralPath $path) { Remove-Item -LiteralPath $path }
         }
@@ -137,7 +137,7 @@ try {
         [void][version]::TryParse([IO.File]::ReadAllText($installedVersionPath).Trim(),[ref]$previousVersion)
     }
     $packageVersion = ConvertTo-HdrVersion ([IO.File]::ReadAllText((Join-Path $PSScriptRoot 'VERSION')).Trim())
-    foreach ($name in @('HdrSdrMenu.ps1','HdrTray.ps1','HdrProfiles.ps1','HdrStartup.ps1','ProfilesUi.cs','ProcessGridTheme.cs','TrayTheme.cs','HdrLocation.cs','Update-HdrApp.ps1','HdrApps.community.txt','VERSION','Start-Tray.vbs','Toggle-HdrSdr.vbs','HdrSdrMenu.ico','HdrEnabled.ico','HdrAutoEnabled.ico','HdrEnabledPaused.ico','HdrAutoIdle.ico','HdrDisabled.ico','HdrUnavailable.ico','HdrEnableAction.ico','HdrDisableAction.ico','HdrUnavailableAction.ico','hdr-context-menu.nss')) {
+    foreach ($name in @('HdrSdrMenu.ps1','HdrTray.ps1','HdrProfiles.ps1','HdrStartup.ps1','ProfilesUi.cs','ProcessGridTheme.cs','TrayTheme.cs','HdrLocation.cs','Update-HdrApp.ps1','HdrApps.community.txt','VERSION','Start-Tray.vbs','Toggle-HdrSdr.vbs','HdrSdrMenu.ico','HdrEnabled.ico','HdrAutoEnabled.ico','HdrAutoExit.ico','HdrEnabledPaused.ico','HdrAutoIdle.ico','HdrDisabled.ico','HdrUnavailable.ico','HdrEnableAction.ico','HdrDisableAction.ico','HdrUnavailableAction.ico','hdr-context-menu.nss')) {
         if (-not (Test-Path -LiteralPath (Join-Path $PSScriptRoot $name))) { throw "Package file missing: $name" }
     }
     if ($installDir.Contains("'") -or $env:SystemRoot.Contains("'")) { throw 'Installation paths cannot contain apostrophes.' }
@@ -159,7 +159,7 @@ try {
     Set-Acl -LiteralPath $installDir -AclObject $acl
     Stop-Helper
     Copy-Item -LiteralPath $locationBuild -Destination $locationExe -Force
-    foreach ($name in @('HdrSdrMenu.ps1','HdrTray.ps1','HdrProfiles.ps1','HdrStartup.ps1','ProfilesUi.cs','ProcessGridTheme.cs','TrayTheme.cs','HdrLocation.cs','Update-HdrApp.ps1','HdrApps.community.txt','VERSION','Start-Tray.vbs','Toggle-HdrSdr.vbs','HdrSdrMenu.ico','HdrEnabled.ico','HdrAutoEnabled.ico','HdrEnabledPaused.ico','HdrAutoIdle.ico','HdrDisabled.ico','HdrUnavailable.ico','HdrEnableAction.ico','HdrDisableAction.ico','HdrUnavailableAction.ico','Setup.ps1','hdr-context-menu.nss','package.commit')) {
+    foreach ($name in @('HdrSdrMenu.ps1','HdrTray.ps1','HdrProfiles.ps1','HdrStartup.ps1','ProfilesUi.cs','ProcessGridTheme.cs','TrayTheme.cs','HdrLocation.cs','Update-HdrApp.ps1','HdrApps.community.txt','VERSION','Start-Tray.vbs','Toggle-HdrSdr.vbs','HdrSdrMenu.ico','HdrEnabled.ico','HdrAutoEnabled.ico','HdrAutoExit.ico','HdrEnabledPaused.ico','HdrAutoIdle.ico','HdrDisabled.ico','HdrUnavailable.ico','HdrEnableAction.ico','HdrDisableAction.ico','HdrUnavailableAction.ico','Setup.ps1','hdr-context-menu.nss','package.commit')) {
         $source = Join-Path $PSScriptRoot $name
         $destination = Join-Path $installDir $name
         if ((Test-Path -LiteralPath $source) -and [IO.Path]::GetFullPath($source) -ne [IO.Path]::GetFullPath($destination)) {
