@@ -152,10 +152,20 @@ try {
 
     # Validation and atomic persistence reject corrupt edits without losing prior data.
     $saved=[IO.File]::ReadAllText((Get-HdrProfilesPath))
+    $snapshot=Read-HdrProfiles -Snapshot
+    Assert ([object]::ReferenceEquals($snapshot,(Read-HdrProfiles -Snapshot))) 'Unchanged profiles should reuse the validated snapshot'
+    [IO.File]::WriteAllText((Get-HdrProfilesPath),'invalid JSON')
+    $failed=$false; try { [void](Read-HdrProfiles -Snapshot) } catch { $failed=$true }
+    Assert $failed 'A corrupt profiles file must surface the error, even with a cached snapshot'
+    Write-HdrAtomicText (Get-HdrProfilesPath) $saved
+    $maps=Get-HdrAppListState
+    Assert ([object]::ReferenceEquals($maps,(Get-HdrAppListState))) 'Unchanged settings should reuse the watched app maps'
     $config.Rules[0].StartDelay=-1
     $failed=$false; try { Save-HdrProfiles $config } catch { $failed=$true }
     Assert ($failed -and [IO.File]::ReadAllText((Get-HdrProfilesPath)) -ceq $saved) 'Invalid rule replaced good configuration'
-    $config=Read-HdrProfiles; $config.Rules[0].Enabled=$false; Save-HdrProfiles $config
+    $config=Read-HdrProfiles; $config.Rules[0].Enabled=$false
+    Assert $snapshot.Rules[0].Enabled 'Editing profiles must not mutate the polling snapshot'
+    Save-HdrProfiles $config
     Assert (-not (Get-HdrWatchedApps).ContainsKey('game')) 'Rule exclusion did not override community entry'
 
     Reset
@@ -184,6 +194,27 @@ try {
     $messageObject=[Windows.Forms.Message]::Create($hostWindow.Handle,0x0218,[IntPtr]18,[IntPtr]::Zero)
     [void]$method.Invoke($hostWindow,@($messageObject))
     Assert ($eventCount -eq 2) 'Display-change and resume messages must notify the refresh queue'
+    $hostWindow.add_DisplayCommandCompleted({
+        param($process,$eventArgs)
+        if ([object]::ReferenceEquals($script:hdrTray.Pending,$process)) { $script:completedCommand++ }
+    })
+    $hdrTray.EventWindow=$hostWindow
+    foreach ($alreadyExited in $false,$true) {
+        $script:completedCommand=0
+        $child=Start-Process -FilePath (Join-Path $PSHOME 'powershell.exe') -ArgumentList '-NoProfile -NonInteractive -Command "Start-Sleep -Milliseconds 100"' -WindowStyle Hidden -PassThru
+        try {
+            if ($alreadyExited) {
+                Assert ($child.WaitForExit(5000) -and $child.HasExited) 'Child did not exit before registration'
+            }
+            Set-HdrPendingDisplayCommand $child
+            $deadline=[Diagnostics.Stopwatch]::StartNew()
+            while (-not $script:completedCommand -and $deadline.ElapsedMilliseconds -lt 1500) {
+                [Windows.Forms.Application]::DoEvents()
+                Start-Sleep -Milliseconds 10
+            }
+            Assert ($script:completedCommand -eq 1) 'Display command completion must arrive without waiting for the periodic poll'
+        } finally { $hdrTray.Pending=$null; $child.Dispose() }
+    }
     $hostWindow.Dispose()
     foreach ($type in @('GameRuleForm','PresetForm','ShortcutForm','ProfileSettingsForm')) {
         $form=New-Object ('LocalHdrMenu.'+$type)

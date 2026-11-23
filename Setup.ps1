@@ -57,6 +57,51 @@ function Backup-File([string]$Path) {
         Copy-Item -LiteralPath $Path -Destination (Join-Path $backupDir ((Get-Date -Format 'yyyyMMdd-HHmmss-fff')+'-'+[IO.Path]::GetFileName($Path)))
     }
 }
+function Get-HdrChangedRuntimeFiles([string]$Source,[string]$Destination,[string[]]$Files) {
+    if ([IO.Path]::GetFullPath($Source) -eq [IO.Path]::GetFullPath($Destination)) { return }
+    foreach ($name in $Files) {
+        $incoming = [IO.FileInfo]::new((Join-Path $Source $name))
+        $installed = [IO.FileInfo]::new((Join-Path $Destination $name))
+        if ($incoming.Exists -ne $installed.Exists -or ($incoming.Exists -and (
+            $incoming.Length -ne $installed.Length -or
+            (Get-FileHash -LiteralPath $incoming.FullName).Hash -cne (Get-FileHash -LiteralPath $installed.FullName).Hash))) {
+            $name
+        }
+    }
+}
+function Save-HdrRuntimeSnapshot([string]$Directory,[string[]]$Files) {
+    $root = [IO.Directory]::CreateDirectory((Join-Path $Directory 'backups'))
+    if ($root.Attributes -band [IO.FileAttributes]::ReparsePoint) { throw 'The HDR Control backup folder is a link.' }
+    $name = 'runtime-' + [DateTime]::UtcNow.ToString('yyyyMMddTHHmmssfffffffZ',[Globalization.CultureInfo]::InvariantCulture) + '-' + [Guid]::NewGuid().ToString('N')
+    $snapshot = Join-Path $root.FullName $name
+    $staging = $snapshot + '.tmp'
+    [void][IO.Directory]::CreateDirectory($staging)
+    try {
+        foreach ($file in $Files) {
+            $path = Join-Path $Directory $file
+            if ([IO.File]::Exists($path)) { [IO.File]::Copy($path,(Join-Path $staging $file)) }
+        }
+        [IO.Directory]::Move($staging,$snapshot)
+    } finally {
+        if ([IO.Directory]::Exists($staging)) {
+            foreach ($file in $Files) { [IO.File]::Delete((Join-Path $staging $file)) }
+            [IO.Directory]::Delete($staging)
+        }
+    }
+}
+function Remove-HdrOldRuntimeSnapshots([string]$Directory,[string[]]$Files) {
+    $path = Join-Path $Directory 'backups'
+    if (-not [IO.Directory]::Exists($path) -or ([IO.File]::GetAttributes($path) -band [IO.FileAttributes]::ReparsePoint)) { return }
+    $snapshots = Get-ChildItem -LiteralPath $path -Directory | Where-Object {
+        $_.Name -cmatch '^runtime-[0-9]{8}T[0-9]{13}Z-[a-f0-9]{32}$' -and -not ($_.Attributes -band [IO.FileAttributes]::ReparsePoint)
+    } | Sort-Object Name -Descending
+    foreach ($snapshot in @($snapshots | Select-Object -Skip 3)) {
+        $entries = @(Get-ChildItem -LiteralPath $snapshot.FullName -Force)
+        if ($entries | Where-Object { $_.PSIsContainer -or $_.Name -notin $Files -or ($_.Attributes -band [IO.FileAttributes]::ReparsePoint) }) { continue }
+        foreach ($entry in $entries) { [IO.File]::Delete($entry.FullName) }
+        [IO.Directory]::Delete($snapshot.FullName)
+    }
+}
 function Stop-Helper {
     Stop-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue
     # Task Scheduler can leave the hidden child running; stop only this helper.
@@ -137,9 +182,12 @@ try {
         [void][version]::TryParse([IO.File]::ReadAllText($installedVersionPath).Trim(),[ref]$previousVersion)
     }
     $packageVersion = ConvertTo-HdrVersion ([IO.File]::ReadAllText((Join-Path $PSScriptRoot 'VERSION')).Trim())
-    foreach ($name in @('HdrSdrMenu.ps1','HdrTray.ps1','HdrProfiles.ps1','HdrStartup.ps1','ProfilesUi.cs','ProcessGridTheme.cs','TrayTheme.cs','HdrLocation.cs','Update-HdrApp.ps1','HdrApps.community.txt','VERSION','Start-Tray.vbs','Toggle-HdrSdr.vbs','HdrSdrMenu.ico','HdrEnabled.ico','HdrAutoEnabled.ico','HdrAutoExit.ico','HdrEnabledPaused.ico','HdrAutoIdle.ico','HdrDisabled.ico','HdrUnavailable.ico','HdrEnableAction.ico','HdrDisableAction.ico','HdrUnavailableAction.ico','hdr-context-menu.nss')) {
-        if (-not (Test-Path -LiteralPath (Join-Path $PSScriptRoot $name))) { throw "Package file missing: $name" }
+    $packageFiles = @(Get-HdrPackageFiles)
+    foreach ($name in $packageFiles) {
+        if (-not (Test-Path -LiteralPath (Join-Path $PSScriptRoot $name) -PathType Leaf)) { throw "Package file missing: $name" }
     }
+    $runtimeFiles = $packageFiles + 'package.commit'
+    $snapshotFiles = $runtimeFiles + 'HDR Control.exe'
     if ($installDir.Contains("'") -or $env:SystemRoot.Contains("'")) { throw 'Installation paths cannot contain apostrophes.' }
     if ((Test-Path -LiteralPath $importFile) -and -not [IO.File]::ReadAllText($importFile).StartsWith('// HDR Context Menu - managed by Setup.ps1')) {
         throw 'An unrelated Nilesoft import already uses hdr-context-menu.nss.'
@@ -157,18 +205,17 @@ try {
     $rule = New-Object Security.AccessControl.FileSystemAccessRule($identity.User,'Modify','ContainerInherit,ObjectInherit','None','Allow')
     $acl.SetAccessRule($rule)
     Set-Acl -LiteralPath $installDir -AclObject $acl
+    $changedFiles = @(Get-HdrChangedRuntimeFiles $PSScriptRoot $installDir $runtimeFiles)
+    if ($changedFiles.Count -and [IO.File]::Exists($runtime)) {
+        Save-HdrRuntimeSnapshot $installDir $snapshotFiles
+    }
     Stop-Helper
     Copy-Item -LiteralPath $locationBuild -Destination $locationExe -Force
-    foreach ($name in @('HdrSdrMenu.ps1','HdrTray.ps1','HdrProfiles.ps1','HdrStartup.ps1','ProfilesUi.cs','ProcessGridTheme.cs','TrayTheme.cs','HdrLocation.cs','Update-HdrApp.ps1','HdrApps.community.txt','VERSION','Start-Tray.vbs','Toggle-HdrSdr.vbs','HdrSdrMenu.ico','HdrEnabled.ico','HdrAutoEnabled.ico','HdrAutoExit.ico','HdrEnabledPaused.ico','HdrAutoIdle.ico','HdrDisabled.ico','HdrUnavailable.ico','HdrEnableAction.ico','HdrDisableAction.ico','HdrUnavailableAction.ico','Setup.ps1','hdr-context-menu.nss','package.commit')) {
+    foreach ($name in $changedFiles) {
         $source = Join-Path $PSScriptRoot $name
         $destination = Join-Path $installDir $name
-        if ((Test-Path -LiteralPath $source) -and [IO.Path]::GetFullPath($source) -ne [IO.Path]::GetFullPath($destination)) {
-            Backup-File $destination
-            Copy-Item -LiteralPath $source -Destination $destination -Force
-        }
-    }
-    if (-not (Test-Path -LiteralPath (Join-Path $PSScriptRoot 'package.commit')) -and $PSScriptRoot -ne $installDir) {
-        Remove-Item -LiteralPath (Join-Path $installDir 'package.commit') -ErrorAction SilentlyContinue
+        if ($name -eq 'package.commit' -and -not [IO.File]::Exists($source)) { [IO.File]::Delete($destination) }
+        else { Copy-Item -LiteralPath $source -Destination $destination -Force }
     }
     New-Item -Path ($menuKey+'\command') -Force | Out-Null
     New-ItemProperty -LiteralPath $menuKey -Name Owner -Value $owner -PropertyType String -Force | Out-Null
@@ -183,8 +230,11 @@ try {
     if ($hasShell) {
         New-Item -ItemType Directory -Path (Split-Path $importFile) -Force | Out-Null
         $nss = [IO.File]::ReadAllText((Join-Path $PSScriptRoot 'hdr-context-menu.nss')).Replace('@@INSTALL@@',$installDir).Replace('@@WINDOWS@@',$env:SystemRoot)
-        Backup-File $importFile
-        Write-Text $importFile ("// HDR Context Menu - managed by Setup.ps1`r`n"+$nss)
+        $importText = "// HDR Context Menu - managed by Setup.ps1"+[Environment]::NewLine+$nss
+        if (-not [IO.File]::Exists($importFile) -or [IO.File]::ReadAllText($importFile) -cne $importText) {
+            Backup-File $importFile
+            Write-Text $importFile $importText
+        }
         # Migrate only the exact inline block used by the original local version.
         $modify = Join-Path $NilesoftPath 'imports\modify.nss'
         if (Test-Path -LiteralPath $modify) {
@@ -237,6 +287,8 @@ try {
     if ($installedVersion -ne $packageVersion) { throw 'Installed version verification failed.' }
     $launchReason = if ($previousVersion -and $installedVersion -gt $previousVersion) { 'UpdateComplete' } else { 'LaunchNow' }
     [void]$scheduler.GetFolder('\').GetTask($taskName).Run($launchReason)
+    try { Remove-HdrOldRuntimeSnapshots $installDir $snapshotFiles }
+    catch { Write-Warning ('Could not prune old HDR Control runtime snapshots: '+$_.Exception.Message) }
     Write-Output 'HDR Control installed. Open HDR Control from the Start menu or use the tray icon.'
 } catch {
     # If an upgrade fails, resume the existing helper where possible.

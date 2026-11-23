@@ -140,11 +140,7 @@ function Invoke-HdrBrightness([string]$DisplayId, [uint32]$Level) {
     throw 'Windows did not confirm the requested SDR brightness.'
 }
 
-$changeMutex=$null
-$ownsChangeMutex=$false
-try {
-    if ($DisplayId -and $Action -notin @('On','Off','Toggle','Brightness')) { throw '-DisplayId requires On, Off, Toggle, or Brightness.' }
-    if ($Action -eq 'Brightness' -and -not $DisplayId) { throw 'Brightness requires a selected display.' }
+function Initialize-HdrDisplayApi {
     # Layouts and constants follow Microsoft's Windows SDK wingdi.h:
     # https://github.com/microsoft/win32metadata/blob/main/generation/WinSDK/RecompiledIdlHeaders/um/wingdi.h
     if (-not ('LocalHdrMenu.DisplayApi' -as [type])) {
@@ -289,6 +285,18 @@ namespace LocalHdrMenu {
 }
 '@
     }
+}
+
+$changeMutex=$null
+$ownsChangeMutex=$false
+try {
+    if ($DisplayId -and $Action -notin @('On','Off','Toggle','Brightness')) { throw '-DisplayId requires On, Off, Toggle, or Brightness.' }
+    if ($Action -eq 'Brightness' -and -not $DisplayId) { throw 'Brightness requires a selected display.' }
+    if ($Action -eq 'Launch') {
+        . (Join-Path $installDir 'HdrProfiles.ps1')
+        Submit-HdrLaunch $LaunchId
+        return
+    }
     if ($Action -eq 'Watch') {
         # One hidden helper per interactive session. Re-read state so changes from
         # Windows Settings, games, and Win+Alt+B are reflected in the menu too.
@@ -308,6 +316,7 @@ namespace LocalHdrMenu {
                 )
             }
             if (-not $ownsMutex -and -not $UpdateComplete) { return }
+            if ($ownsMutex) { Initialize-HdrDisplayApi }
             . (Join-Path $installDir 'HdrTray.ps1')
             if ($UpdateComplete) { Show-HdrNotification ("Update complete`nHDR Control "+(Get-HdrInstalledVersion)+" is installed.") }
             if ($ownsMutex) { Start-HdrTray }
@@ -318,11 +327,7 @@ namespace LocalHdrMenu {
         }
         return
     }
-    if ($Action -eq 'Launch') {
-        . (Join-Path $installDir 'HdrTray.ps1')
-        Submit-HdrLaunch $LaunchId
-        return
-    }
+    Initialize-HdrDisplayApi
     if ($Action -in @('On','Off','Toggle','Brightness')) {
         # Serialize native writes from the tray, desktop entry, and CLI. Read the
         # current state only after acquiring the lock; never use a queued snapshot.

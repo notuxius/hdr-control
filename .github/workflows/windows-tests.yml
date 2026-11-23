@@ -1,0 +1,19 @@
+name: Windows regression tests
+on:
+  pull_request:
+  push:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  regression:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run Windows PowerShell 5.1 tests
+        shell: powershell
+        run: |
+          foreach ($test in 'Automation','Community','DirectLaunch','Display','LaunchPreset','Profiles','Setup','Update') {
+            & powershell.exe -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -STA -File "tests/$test.Tests.ps1"
+            if ($LASTEXITCODE -ne 0) { throw "Test failed: $test" }
+          }

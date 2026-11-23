@@ -13,6 +13,7 @@ New-Item -ItemType Directory -Path $root | Out-Null
 function Get-HdrCommunityCachePath { return Join-Path $root 'cache.txt' }
 function Get-HdrCommunityBundlePath { return Join-Path $root 'bundle.txt' }
 function Get-HdrCustomAppsPath { return Join-Path $root 'custom.txt' }
+function Get-HdrProfilesPath { return Join-Path $root 'profiles.json' }
 function Get-HdrAutomationPreference([string]$Name) { return $script:useCommunity }
 function Show-HdrMessage([string]$Text) { $script:lastMessage = $Text }
 function Update-HdrGameListsPanel { }
@@ -37,6 +38,16 @@ try {
     [IO.File]::WriteAllText((Get-HdrCustomAppsPath), "CustomGame.exe`n!ExcludedGame.exe`n")
     $names = Get-HdrWatchedApps
     Assert ($names.Count -eq 2 -and $names.ContainsKey('customgame') -and $names.ContainsKey('secondgame')) 'Downloaded list must preserve custom additions and exclusions'
+    $customPath = Get-HdrCustomAppsPath
+    $originalText = [IO.File]::ReadAllText($customPath)
+    $originalTime = [IO.File]::GetLastWriteTimeUtc($customPath)
+    [IO.File]::WriteAllText($customPath,$originalText.Replace('CustomGame','EditedGame'))
+    [IO.File]::SetLastWriteTimeUtc($customPath,$originalTime)
+    Assert ((Get-HdrWatchedApps).ContainsKey('editedgame')) 'Same-length edits with the same timestamp must still invalidate the app maps'
+    $locked = [IO.File]::Open($customPath,[IO.FileMode]::Open,[IO.FileAccess]::ReadWrite,[IO.FileShare]::None)
+    try { Reject { Get-HdrWatchedApps } 'An unreadable custom list must surface a scan error' }
+    finally { $locked.Dispose() }
+    [IO.File]::WriteAllText($customPath,$originalText)
     $customHash = (Get-FileHash (Get-HdrCustomAppsPath)).Hash
     $cacheHash = (Get-FileHash (Get-HdrCommunityCachePath)).Hash
     foreach ($bad in @('', '<html>error</html>', $header, ($header + 'Launcher.exe'), ($header + '!Excluded.exe'),

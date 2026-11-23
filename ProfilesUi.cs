@@ -23,6 +23,7 @@ namespace LocalHdrMenu {
         readonly System.Windows.Forms.Timer exitTimer=new System.Windows.Forms.Timer();
         public event EventHandler GameExitCheck;
         public event EventHandler DisplayChanged;
+        public event EventHandler DisplayCommandCompleted;
         public event EventHandler HotkeyPressed;
         public int LastHotkey;
         public HdrEventWindow() {
@@ -59,6 +60,25 @@ namespace LocalHdrMenu {
         }
         void OnGameExited(object sender,EventArgs args) {
             if (!IsDisposed && !Disposing) ScheduleExitCheck(1);
+        }
+        public void WatchDisplayCommand(Process command) {
+            int queued = 0;
+            EventHandler completed = delegate(object sender,EventArgs args) {
+                if (Interlocked.Exchange(ref queued,1) == 0) OnDisplayCommandExited(sender,args);
+            };
+            command.Exited += completed;
+            try {
+                if (command.HasExited) completed(command,EventArgs.Empty);
+                else command.EnableRaisingEvents = true;
+            } catch (InvalidOperationException) { } // The periodic refresh can still check completion.
+            catch (System.ComponentModel.Win32Exception) { }
+        }
+        void OnDisplayCommandExited(object sender,EventArgs args) {
+            try {
+                BeginInvoke((MethodInvoker)delegate {
+                    if (DisplayCommandCompleted != null) DisplayCommandCompleted(sender,args);
+                });
+            } catch (InvalidOperationException) { } // The tray window is closing.
         }
         public bool Bind(int id,uint modifiers,uint key) {
             if (!RegisterHotKey(Handle,id,modifiers|0x4000,key)) return false;

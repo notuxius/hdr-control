@@ -56,6 +56,11 @@ try {
     Assert ($calls.Count -eq 3 -and $calls[1].Action -eq 'Brightness') 'Brightness must follow HDR verification'
 
     Reset
+    $matching=@(@{Key=(Get-HdrBrightnessKey $a);Enabled=$false;Level=$null},@{Key=(Get-HdrBrightnessKey $b);Enabled=$true;Level=2500})
+    Start-HdrScene $matching 'Already applied'; Step
+    Assert ($calls.Count -eq 0 -and $null -eq $hdrTray.Scene) 'Already-satisfied preset steps must advance in the same refresh'
+
+    Reset
     Start-HdrScene $targets 'Gaming'; Step; Step $false
     Assert $hdrTray.Scene.Rollback 'Failed brightness must initiate preset recovery'
     for($i=0;$i -lt 8;$i++) { Step }
@@ -112,6 +117,25 @@ try {
     $shell=New-Object -ComObject WScript.Shell
     try { $shortcut=$shell.CreateShortcut($shortcutPath); Assert ($shortcut.Arguments -like ('* Launch '+$rule.Id) -and $shortcut.Arguments -notmatch '--example') 'Unsafe shortcut arguments' }
     finally { [void][Runtime.InteropServices.Marshal]::ReleaseComObject($shell) }
+
+    # The launcher must queue from a fresh process without a tray UI or native display assembly.
+    Copy-Item -LiteralPath (Join-Path $repo 'HdrSdrMenu.ps1'),(Join-Path $repo 'HdrProfiles.ps1') -Destination $root
+    Copy-Item -LiteralPath (Get-HdrProfilesPath) -Destination (Join-Path $root 'HdrProfiles.json')
+    $probe=Join-Path $root 'LaunchProbe.ps1'
+    [IO.File]::WriteAllText($probe,@'
+param([string]$RuleId)
+$ErrorActionPreference='Stop'
+function Start-Process($FilePath,$ArgumentList,$WindowStyle) {
+    $script:startedWatch=$ArgumentList -like '* -Action Watch'
+}
+. (Join-Path $PSScriptRoot 'HdrSdrMenu.ps1') -Action Launch -LaunchId $RuleId
+$requests=@(Get-ChildItem -LiteralPath (Get-HdrRequestDirectory) -Filter '*.json')
+if (-not $startedWatch -or $requests.Count -ne 1 -or ('LocalHdrMenu.DisplayApi' -as [type])) { throw 'Shortcut startup loaded the display API or failed to queue a request.' }
+$request=[IO.File]::ReadAllText($requests[0].FullName) | ConvertFrom-Json
+if ($request.Id -cne $RuleId) { throw 'Queued launch did not preserve the saved rule ID.' }
+'@)
+    & (Join-Path $PSHOME 'powershell.exe') -NoProfile -NonInteractive -STA -ExecutionPolicy Bypass -File $probe -RuleId $rule.Id
+    Assert ($LASTEXITCODE -eq 0) 'Lightweight shortcut entry point failed'
     'PASS: preset sequencing, brightness, recovery, missing monitors, concurrency, verified prelaunch, arguments, working directory, timeout, request expiry/consumption, and shortcut contents.'
 } finally {
     $full=[IO.Path]::GetFullPath($root)

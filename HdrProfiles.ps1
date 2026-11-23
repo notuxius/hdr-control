@@ -1,5 +1,15 @@
 # Per-user profiles, automation ownership, launch requests, and diagnostic history.
 # Loaded by HdrTray.ps1; importing this file never changes a display.
+function ConvertTo-HdrAppKey([string]$Name) {
+    $value = $Name.Trim()
+    if (-not $value -or $value.StartsWith('#')) { return $null }
+    # Exact executable names only; paths and wildcard rules can match unrelated apps.
+    if ($value.IndexOfAny([IO.Path]::GetInvalidFileNameChars()) -ge 0) { return $null }
+    if ($value.EndsWith('.exe', [StringComparison]::OrdinalIgnoreCase)) { $value = $value.Substring(0, $value.Length - 4) }
+    if (-not $value -or $value -eq '.' -or $value -eq '..') { return $null }
+    return $value.ToLowerInvariant()
+}
+
 function Get-HdrProfilesPath { Join-Path $PSScriptRoot 'HdrProfiles.json' }
 function New-HdrProfiles {
     [pscustomobject]@{Version=1;ExitPolicy='Sdr';Rules=@();Monitors=@();Presets=@();Bindings=@()}
@@ -57,12 +67,22 @@ function Test-HdrProfiles($Data) {
         if ($binding.Action -eq 'Preset' -and @($Data.Presets | Where-Object Id -eq $binding.PresetId).Count -ne 1) { throw 'A shortcut refers to a missing preset.' }
     }
 }
-function Read-HdrProfiles {
+function Read-HdrProfiles([switch]$Snapshot) {
     $path=Get-HdrProfilesPath
-    if (-not [IO.File]::Exists($path)) { return New-HdrProfiles }
-    if ([IO.FileInfo]::new($path).Length -gt 1MB) { throw 'Profiles file is too large.' }
-    $data=[IO.File]::ReadAllText($path) | ConvertFrom-Json -ErrorAction Stop
-    Test-HdrProfiles $data
+    try {
+        if ([IO.FileInfo]::new($path).Length -gt 1MB) { throw 'Profiles file is too large.' }
+        $text=[IO.File]::ReadAllText($path)
+    } catch [IO.FileNotFoundException], [IO.DirectoryNotFoundException] { $text=$null }
+    # Consumers that edit profiles get their own copy.
+    if ($Snapshot -and $script:hdrProfileSnapshot -and [object]::Equals($script:hdrProfileSnapshot.Text,$text)) {
+        return $script:hdrProfileSnapshot.Data
+    }
+    if ($null -eq $text) { $data=New-HdrProfiles }
+    else {
+        $data=$text | ConvertFrom-Json -ErrorAction Stop
+        Test-HdrProfiles $data
+    }
+    if ($Snapshot) { $script:hdrProfileSnapshot=@{Text=$text;Data=$data} }
     return $data
 }
 function Save-HdrProfiles($Data) {
@@ -147,7 +167,7 @@ function Test-HdrExactProcess([string]$Name,[string]$Path) {
     if ($unreadable) { throw 'A matching process path could not be read; preserving HDR until the next successful scan.' }
     return $false
 }
-function Update-HdrPolicy($Displays) {
+function Update-HdrPolicy($Displays,$Profiles) {
     $state=$script:hdrTray.Automation; $now=Get-HdrAutomationTime
     if ($null -eq $script:hdrTray.Launches) { $script:hdrTray.Launches=@{} }
     if (($now-$state.LastPoll).TotalSeconds -lt 2) { return }; $state.LastPoll=$now
@@ -157,15 +177,15 @@ function Update-HdrPolicy($Displays) {
         Set-HdrDecision 'Automatic HDR is paused'; return
     }
     try {
-        $profiles=Read-HdrProfiles; $lists=Get-HdrAppListState
+        if ($null -eq $Profiles) { $Profiles=Read-HdrProfiles -Snapshot }
+        $lists=Get-HdrAppListState -Profiles $Profiles
         $processIds=@{}
         $running=@{}; foreach ($name in @(Get-HdrRunningAppNames $processIds)) { $key=ConvertTo-HdrAppKey $name; if ($key) { $running[$key]=$name } }
-        $rules=@{}; foreach ($rule in $profiles.Rules) { $rules[(ConvertTo-HdrAppKey $rule.Executable)]=$rule }
         $matches=@{}
         if ($automatic) {
             foreach ($key in $lists.Effective.Keys) {
                 if ($running.ContainsKey($key)) {
-                    $rule=$rules[$key]; if ($null -eq $rule) { $rule=New-HdrGameRule ($key+'.exe') }
+                    $rule=$lists.Rules[$key]; if ($null -eq $rule) { $rule=New-HdrGameRule ($key+'.exe') }
                     if (Test-HdrExactProcess $key $rule.ExactPath) { $matches[$key]=$rule }
                 }
             }
@@ -356,26 +376,26 @@ function Complete-HdrSceneStep([bool]$Success) {
 function Update-HdrScene($Displays) {
     $scene=$script:hdrTray.Scene
     if ($null -eq $scene -or $null -ne $script:hdrTray.Pending -or $null -ne $script:hdrTray.UpdateProcess) { return }
-    if ($scene.Index -ge $scene.Steps.Count) {
-        Write-HdrDiagnostic 'PRESET' ($scene.Name+$(if ($scene.Rollback) {' failed; recovery finished'} else {' applied'}))
-        $script:hdrTray.Scene=$null
-        if ($scene.Error) { [void](Show-HdrMessage $scene.Error) }
+    while ($scene.Index -lt $scene.Steps.Count) {
+        $step=$scene.Steps[$scene.Index]; $scene.Pending=$true
+        try {
+            $found=@($Displays | Where-Object { (Get-HdrMonitorKey $_) -ceq $step.Key })
+            if ($found.Count -ne 1) { throw 'Selected monitor is disconnected or ambiguous.' }
+            $d=$found[0]
+            if ($step.Action -eq 'Brightness') {
+                if ($d.SdrWhiteLevel -eq $step.Level) { Complete-HdrSceneStep $true; continue }
+                if (-not (Start-HdrBrightnessChange $d ([uint32]$step.Level) $false -Automatic)) { throw 'Display controls are busy.' }
+            } else {
+                if ($d.HdrEnabled -eq ($step.Action -eq 'On')) { Complete-HdrSceneStep $true; continue }
+                Start-HdrChange $step.Action $d.DisplayId -Automatic
+                if ($null -eq $script:hdrTray.Pending) { throw 'Display command did not start.' }
+            }
+        } catch { Write-HdrDiagnostic 'ERROR' $_.Exception.Message; Complete-HdrSceneStep $false }
         return
     }
-    $step=$scene.Steps[$scene.Index]; $scene.Pending=$true
-    try {
-        $found=@($Displays | Where-Object { (Get-HdrMonitorKey $_) -ceq $step.Key })
-        if ($found.Count -ne 1) { throw 'Selected monitor is disconnected or ambiguous.' }
-        $d=$found[0]
-        if ($step.Action -eq 'Brightness') {
-            if ($d.SdrWhiteLevel -eq $step.Level) { Complete-HdrSceneStep $true; return }
-            if (-not (Start-HdrBrightnessChange $d ([uint32]$step.Level) $false -Automatic)) { throw 'Display controls are busy.' }
-        } else {
-            if ($d.HdrEnabled -eq ($step.Action -eq 'On')) { Complete-HdrSceneStep $true; return }
-            Start-HdrChange $step.Action $d.DisplayId -Automatic
-            if ($null -eq $script:hdrTray.Pending) { throw 'Display command did not start.' }
-        }
-    } catch { Write-HdrDiagnostic 'ERROR' $_.Exception.Message; Complete-HdrSceneStep $false }
+    Write-HdrDiagnostic 'PRESET' ($scene.Name+$(if ($scene.Rollback) {' failed; recovery finished'} else {' applied'}))
+    $script:hdrTray.Scene=$null
+    if ($scene.Error) { [void](Show-HdrMessage $scene.Error) }
 }
 function Invoke-HdrBinding($Binding) {
     try {

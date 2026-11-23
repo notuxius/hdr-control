@@ -186,6 +186,13 @@ function Save-HdrLastBrightnessLevel([string]$Key, [uint32]$Level) {
     } catch { Write-HdrDiagnostic 'SETTINGS' ('Could not save brightness history: '+$_.Exception.Message) }
 }
 
+function Set-HdrPendingDisplayCommand($Process) {
+    $script:hdrTray.Pending = $Process
+    if ($Process -is [Diagnostics.Process] -and $script:hdrTray.EventWindow) {
+        $script:hdrTray.EventWindow.WatchDisplayCommand($Process)
+    }
+}
+
 function Start-HdrBrightnessChange($Display, [uint32]$Level, [bool]$Restore, [switch]$Automatic, $Settings, [string]$PreferenceKey, $Edit) {
     if ($null -ne $script:hdrTray.Pending -or $null -ne $script:hdrTray.UpdateProcess -or (-not $Automatic -and $null -ne $script:hdrTray.Scene)) { return $false }
     if (-not (Test-HdrBrightnessAvailable $Display) -or $Display.DisplayId -cnotmatch '^[A-Za-z0-9+/=]+$' -or
@@ -197,7 +204,7 @@ function Start-HdrBrightnessChange($Display, [uint32]$Level, [bool]$Restore, [sw
         '-NoLogo -NoProfile -NonInteractive -STA -WindowStyle Hidden -ExecutionPolicy Bypass -File "{0}" -Action Brightness -DisplayId "{1}" -SdrWhiteLevel {2}' -f $installedScript,$Display.DisplayId,$Level
     ) -WindowStyle Hidden -PassThru -ErrorAction Stop
     $script:hdrTray.BrightnessPending = $operation
-    $script:hdrTray.Pending = $process
+    Set-HdrPendingDisplayCommand $process
     $script:hdrTray.Exit.Enabled = $false
     $script:hdrTray.Command.Enabled = $false
     Set-HdrDisplayCommandsEnabled $false
@@ -517,7 +524,13 @@ function ConvertFrom-HdrCommunityList([string]$Text) {
 
 function Read-HdrCommunityList([string]$Path) {
     if ([IO.FileInfo]::new($Path).Length -gt 1MB) { throw 'Community list is too large.' }
-    return ConvertFrom-HdrCommunityList ([IO.File]::ReadAllText($Path, [Text.UTF8Encoding]::new($false, $true)))
+    $text = [IO.File]::ReadAllText($Path, [Text.UTF8Encoding]::new($false, $true))
+    if ($script:hdrCommunitySnapshot -and [string]::Equals($text,$script:hdrCommunitySnapshot.Text,[StringComparison]::Ordinal)) {
+        return $script:hdrCommunitySnapshot.Names
+    }
+    $names = @(ConvertFrom-HdrCommunityList $text)
+    $script:hdrCommunitySnapshot = @{Text=$text;Names=$names}
+    return $names
 }
 
 function Get-HdrDefaultAppNames {
@@ -541,6 +554,7 @@ function Save-HdrCommunityList([string]$Text) {
         # Replace atomically, so interrupted downloads/writes cannot damage the cache.
         if ([IO.File]::Exists($path)) { [IO.File]::Replace($temporary, $path, [NullString]::Value) }
         else { [IO.File]::Move($temporary, $path) }
+        $script:hdrCommunitySnapshot = @{Text=$Text;Names=$names}
         $script:hdrCommunityLastGood = $names
     } finally {
         if ([IO.File]::Exists($temporary)) { [IO.File]::Delete($temporary) }
@@ -611,37 +625,32 @@ function Edit-HdrCustomApps {
     }
 }
 
-function ConvertTo-HdrAppKey([string]$Name) {
-    $value = $Name.Trim()
-    if (-not $value -or $value.StartsWith('#')) { return $null }
-    # Exact executable names only; paths and wildcard rules can match unrelated apps.
-    if ($value.IndexOfAny([IO.Path]::GetInvalidFileNameChars()) -ge 0) { return $null }
-    if ($value.EndsWith('.exe', [StringComparison]::OrdinalIgnoreCase)) { $value = $value.Substring(0, $value.Length - 4) }
-    if (-not $value -or $value -eq '.' -or $value -eq '..') { return $null }
-    return $value.ToLowerInvariant()
-}
-
-function Get-HdrAppListState([switch]$IncludeDisabledDefaults) {
+function Get-HdrAppListState([switch]$IncludeDisabledDefaults,$Profiles=(Read-HdrProfiles -Snapshot)) {
+    $useDefaults = Get-HdrAutomationPreference 'UseCommunityApps'
+    $catalog = @(if ($useDefaults -or $IncludeDisabledDefaults) { Get-HdrDefaultAppNames })
+    $catalogKey = $catalog -join [Environment]::NewLine
+    # Missing custom files are normal. Other read failures must not look like app exits.
+    try { $text = [IO.File]::ReadAllText((Get-HdrCustomAppsPath)) }
+    catch [IO.FileNotFoundException] { $text = '' }
+    $cached = $script:hdrAppListSnapshot
+    if ($cached -and [object]::ReferenceEquals($cached.Profiles,$Profiles) -and $cached.UseDefaults -eq $useDefaults -and
+        [string]::Equals($cached.Catalog,$catalogKey,[StringComparison]::Ordinal) -and
+        [string]::Equals($cached.CustomText,$text,[StringComparison]::Ordinal)) {
+        return $cached.Lists
+    }
     $names = @{}
     $defaults = @{}
     $custom = @{}
-    $useDefaults = Get-HdrAutomationPreference 'UseCommunityApps'
-    if ($useDefaults -or $IncludeDisabledDefaults) {
-        foreach ($line in Get-HdrDefaultAppNames) {
-            $key = ConvertTo-HdrAppKey $line
-            if ($key) {
-                $defaults[$key] = $true
-                if ($useDefaults) { $names[$key] = $true }
-            }
+    $rules = @{}
+    foreach ($line in $catalog) {
+        $key = ConvertTo-HdrAppKey $line
+        if ($key) {
+            $defaults[$key] = $true
+            if ($useDefaults) { $names[$key] = $true }
         }
     }
-    $path = Get-HdrCustomAppsPath
-    # Missing custom files are normal. Other read failures must not look like app exits.
-    $lines = @()
-    try { $lines = [IO.File]::ReadAllLines($path) }
-    catch [IO.FileNotFoundException] { }
     $excluded = @{}
-    foreach ($line in $lines) {
+    foreach ($line in ($text -split '\r\n|\n|\r')) {
         $value = $line.Trim()
         $exclude = $value.StartsWith('!')
         if ($exclude) { $value = $value.Substring(1) }
@@ -652,13 +661,16 @@ function Get-HdrAppListState([switch]$IncludeDisabledDefaults) {
         }
     }
     foreach ($key in $excluded.Keys) { $names.Remove($key) }
-    foreach ($rule in (Read-HdrProfiles).Rules) {
+    foreach ($rule in $Profiles.Rules) {
         $key=ConvertTo-HdrAppKey $rule.Executable
+        $rules[$key]=$rule
         $custom[$key]=$true
         if ($rule.Enabled) { $names[$key]=$true; $excluded.Remove($key) }
         else { $names.Remove($key); $excluded[$key]=$true }
     }
-    return @{Defaults=$defaults;Custom=$custom;Excluded=$excluded;Effective=$names}
+    $lists = @{Defaults=$defaults;Custom=$custom;Excluded=$excluded;Effective=$names;Rules=$rules}
+    $script:hdrAppListSnapshot = @{Profiles=$Profiles;UseDefaults=$useDefaults;Catalog=$catalogKey;CustomText=$text;Lists=$lists}
+    return $lists
 }
 
 function Get-HdrWatchedApps { return (Get-HdrAppListState).Effective }
@@ -924,7 +936,7 @@ function Get-HdrRunningAppNames([hashtable]$ProcessIds) {
 function Get-HdrAutomationTime { return [DateTime]::UtcNow }
 
 function New-HdrAutomationState { return New-HdrPolicyState }
-function Update-HdrAutomation($Displays) { Update-HdrPolicy $Displays }
+function Update-HdrAutomation($Displays,$Profiles) { Update-HdrPolicy $Displays $Profiles }
 
 function Get-HdrTrayState($Displays) {
     $capable = @($Displays | Where-Object HdrSupported)
@@ -1109,6 +1121,7 @@ function Update-HdrTray([switch]$NotifyRefresh) {
             $succeeded = $script:hdrTray.Pending.ExitCode -eq 0
             $script:hdrTray.Pending.Dispose()
             $script:hdrTray.Pending = $null
+            if ($script:hdrTray.PolicyPending) { $script:hdrTray.Automation.LastPoll=[DateTime]::MinValue }
             Complete-HdrPolicyCommand $succeeded
             Complete-HdrSceneStep $succeeded
             if ($null -ne $script:hdrTray.BrightnessPending) {
@@ -1147,15 +1160,16 @@ function Update-HdrTray([switch]$NotifyRefresh) {
                 Show-HdrNotification "Displays refreshed.`n$added added, $removed removed. $total."
             }
         }
+        $profiles=$null
         try {
-            $profiles=Read-HdrProfiles
+            $profiles=Read-HdrProfiles -Snapshot
             foreach ($d in $displays) { $d.Name=Get-HdrMonitorName $d $profiles }
         } catch { Write-HdrDiagnostic 'SETTINGS' $_.Exception.Message }
         # A transient file/registry failure must not stop the tray or its timer.
         try { Sync-HdrMenu $displays } catch { }
         Receive-HdrLaunchRequests
         Update-HdrScene $displays
-        Update-HdrAutomation $displays
+        Update-HdrAutomation $displays $profiles
         Update-HdrLaunches $displays
         Update-HdrBrightness $displays
         Set-HdrTrayState (Get-HdrTrayState $displays)
@@ -1362,9 +1376,10 @@ function Start-HdrChange([string]$NextAction, [string]$DisplayId, [switch]$Autom
         # Keep the menu responsive while Windows changes display mode. Use the
         # explicit action offered by the menu. Middle-click uses Toggle, which
         # reads the current Windows state in the child before choosing On/Off.
-        $script:hdrTray.Pending = Start-Process -FilePath (Join-Path $PSHOME 'powershell.exe') -ArgumentList (
+        $process = Start-Process -FilePath (Join-Path $PSHOME 'powershell.exe') -ArgumentList (
             '-NoLogo -NoProfile -NonInteractive -STA -WindowStyle Hidden -ExecutionPolicy Bypass -File "{0}" -Action {1}{2} -FromHelper' -f $installedScript,$NextAction,$targetArgument
-        ) -WindowStyle Hidden -PassThru
+        ) -WindowStyle Hidden -PassThru -ErrorAction Stop
+        Set-HdrPendingDisplayCommand $process
         if (-not $Automatic) {
             if ($NextAction -in 'On','Off') {
                 $state=if ($NextAction -eq 'On') { 'enabled' } else { 'disabled' }
@@ -1569,6 +1584,10 @@ function Initialize-HdrTray {
         if ($script:hdrTray.Refreshing) { $script:hdrTray.EventWindow.ScheduleExitCheck(50); return }
         $script:hdrTray.Automation.LastPoll=[DateTime]::MinValue
         Update-HdrTray
+    })
+    $script:hdrTray.EventWindow.add_DisplayCommandCompleted({
+        param($process,$eventArgs)
+        if ([object]::ReferenceEquals($script:hdrTray.Pending,$process)) { Update-HdrTray }
     })
     $script:hdrTray.EventWindow.add_DisplayChanged({
         $script:hdrTray.EventRetries=3
