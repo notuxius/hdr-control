@@ -176,3 +176,7 @@ Publishing a release runs the Windows installer workflow, which attaches a versi
 To build an installer locally, install Inno Setup 6 and run `powershell.exe -NoProfile -File installer\Build-Installer.ps1 -SourceCommit (git rev-parse HEAD)`. Outputs are written to `dist`. Use `-SourceRoot` to build an installer for an older extracted release without changing its source. Silent installation supports `/VERYSILENT /SUPPRESSMSGBOXES /NORESTART`; add `/NoRestartShell=1` when Explorer must remain running.
 
 Run `powershell.exe -NoProfile -STA -File tests\Update.Tests.ps1` to verify version ordering, archive validation, installation, cancellation, and recovery using isolated files and mocked installers.
+
+## License
+
+HDR Control’s original code is available under the [MIT License](LICENSE). The bundled [HDR app list](HdrApps.community.txt) retains the upstream MIT notice.
